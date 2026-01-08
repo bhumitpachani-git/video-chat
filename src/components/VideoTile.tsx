@@ -23,30 +23,91 @@ export function VideoTile({
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasVideo, setHasVideo] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-      
-      // Check if stream has video tracks
-      const videoTracks = stream.getVideoTracks();
-      setHasVideo(videoTracks.length > 0 && videoTracks.some(track => track.enabled));
-
-      // Listen for track changes
-      const handleTrackChange = () => {
-        const tracks = stream.getVideoTracks();
-        setHasVideo(tracks.length > 0 && tracks.some(track => track.enabled));
-      };
-
-      stream.addEventListener('addtrack', handleTrackChange);
-      stream.addEventListener('removetrack', handleTrackChange);
-
-      return () => {
-        stream.removeEventListener('addtrack', handleTrackChange);
-        stream.removeEventListener('removetrack', handleTrackChange);
-      };
+    const videoElement = videoRef.current;
+    if (!videoElement || !stream) {
+      console.log(`[VideoTile ${username}] No video element or stream`);
+      setHasVideo(false);
+      return;
     }
-  }, [stream]);
+
+    console.log(`[VideoTile ${username}] Setting stream with tracks:`, stream.getTracks().map(t => ({ kind: t.kind, readyState: t.readyState, enabled: t.enabled })));
+    
+    // Set the stream
+    videoElement.srcObject = stream;
+    
+    // Check video tracks
+    const checkVideoTracks = () => {
+      const videoTracks = stream.getVideoTracks();
+      const hasActiveVideo = videoTracks.length > 0 && videoTracks.some(track => track.readyState === 'live');
+      console.log(`[VideoTile ${username}] Video tracks check:`, { count: videoTracks.length, hasActiveVideo, tracks: videoTracks.map(t => ({ readyState: t.readyState, enabled: t.enabled })) });
+      setHasVideo(hasActiveVideo);
+    };
+
+    checkVideoTracks();
+
+    // Try to play the video
+    const playVideo = async () => {
+      try {
+        await videoElement.play();
+        setIsPlaying(true);
+        console.log(`[VideoTile ${username}] Video playing successfully`);
+      } catch (error) {
+        console.error(`[VideoTile ${username}] Error playing video:`, error);
+        // Try again with muted (autoplay policies)
+        videoElement.muted = true;
+        try {
+          await videoElement.play();
+          setIsPlaying(true);
+          console.log(`[VideoTile ${username}] Video playing (muted fallback)`);
+        } catch (e) {
+          console.error(`[VideoTile ${username}] Still can't play:`, e);
+        }
+      }
+    };
+
+    playVideo();
+
+    // Listen for track changes
+    const handleTrackChange = () => {
+      console.log(`[VideoTile ${username}] Track changed`);
+      checkVideoTracks();
+    };
+
+    stream.addEventListener('addtrack', handleTrackChange);
+    stream.addEventListener('removetrack', handleTrackChange);
+
+    // Listen for video events
+    const handleLoadedMetadata = () => {
+      console.log(`[VideoTile ${username}] Video metadata loaded`);
+      checkVideoTracks();
+    };
+
+    const handleCanPlay = () => {
+      console.log(`[VideoTile ${username}] Video can play`);
+      playVideo();
+    };
+
+    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+    videoElement.addEventListener('canplay', handleCanPlay);
+
+    return () => {
+      stream.removeEventListener('addtrack', handleTrackChange);
+      stream.removeEventListener('removetrack', handleTrackChange);
+      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      videoElement.removeEventListener('canplay', handleCanPlay);
+    };
+  }, [stream, username]);
+
+  // Also check when isVideoOff changes
+  useEffect(() => {
+    if (stream && !isVideoOff) {
+      const videoTracks = stream.getVideoTracks();
+      setHasVideo(videoTracks.length > 0 && videoTracks.some(track => track.readyState === 'live'));
+    }
+  }, [isVideoOff, stream]);
 
   const showVideo = stream && hasVideo && !isVideoOff;
 
@@ -119,9 +180,12 @@ export function VideoTile({
         </div>
       </div>
 
-      {/* Speaking indicator ring */}
-      {isLocal && (
-        <div className="absolute inset-0 border-2 border-primary/0 rounded-xl transition-colors duration-200" />
+      {/* Debug info for remote streams */}
+      {!isLocal && (
+        <div className="absolute top-2 left-2 text-xs bg-black/50 px-2 py-1 rounded text-white">
+          {stream ? `Tracks: ${stream.getTracks().length}` : 'No stream'}
+          {isPlaying ? ' ▶️' : ' ⏸️'}
+        </div>
       )}
     </div>
   );
