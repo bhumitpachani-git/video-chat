@@ -4,7 +4,6 @@ import { Device, types } from 'mediasoup-client';
 type Transport = types.Transport;
 type Producer = types.Producer;
 type Consumer = types.Consumer;
-type RtpCapabilities = types.RtpCapabilities;
 
 const SERVER_URL = 'https://video-server-2261.onrender.com';
 
@@ -40,6 +39,8 @@ export class MediaSoupClient {
   private roomId: string = '';
   private username: string = '';
   private peerUsernames: Map<string, string> = new Map();
+  private pendingProducers: ProducerInfo[] = [];
+  private isRecvTransportReady: boolean = false;
 
   // Callbacks
   public onLocalStream: ((stream: MediaStream) => void) | null = null;
@@ -79,20 +80,31 @@ export class MediaSoupClient {
 
       // Handle new producer from other peers
       this.socket.on('new-producer', async ({ socketId, producerId, kind }: ProducerInfo) => {
-        console.log(`[MediaSoup] New producer: ${producerId} (${kind}) from ${socketId}`);
-        await this.consumeProducer(socketId, producerId, kind);
+        console.log(`[MediaSoup] 🎬 New producer event: ${producerId} (${kind}) from ${socketId}`);
+        
+        if (!this.isRecvTransportReady) {
+          console.log('[MediaSoup] Receive transport not ready, queuing producer');
+          this.pendingProducers.push({ socketId, producerId, kind });
+          return;
+        }
+        
+        try {
+          await this.consumeProducer(socketId, producerId, kind);
+        } catch (error) {
+          console.error('[MediaSoup] Error consuming new producer:', error);
+        }
       });
 
       // Handle user joined
       this.socket.on('user-joined', ({ socketId, username }: Peer) => {
-        console.log(`[MediaSoup] User joined: ${username} (${socketId})`);
+        console.log(`[MediaSoup] 👤 User joined: ${username} (${socketId})`);
         this.peerUsernames.set(socketId, username);
         this.onPeerJoined?.({ socketId, username });
       });
 
       // Handle user left
       this.socket.on('user-left', ({ socketId, username }: Peer) => {
-        console.log(`[MediaSoup] User left: ${username} (${socketId})`);
+        console.log(`[MediaSoup] 👋 User left: ${username} (${socketId})`);
         this.peerUsernames.delete(socketId);
         this.removeRemoteStream(socketId);
         this.onPeerLeft?.(socketId);
@@ -122,7 +134,7 @@ export class MediaSoupClient {
           return;
         }
 
-        console.log('[MediaSoup] Joined room, RTP capabilities received');
+        console.log('[MediaSoup] ✅ Joined room, RTP capabilities received');
         console.log('[MediaSoup] Existing peers:', response.peers);
 
         // Store peer usernames
@@ -134,7 +146,7 @@ export class MediaSoupClient {
         try {
           this.device = new Device();
           await this.device.load({ routerRtpCapabilities: response.rtpCapabilities });
-          console.log('[MediaSoup] Device loaded');
+          console.log('[MediaSoup] ✅ Device loaded with RTP capabilities');
           resolve(response.peers);
         } catch (error) {
           console.error('[MediaSoup] Error loading device:', error);
@@ -147,62 +159,83 @@ export class MediaSoupClient {
   async createTransports(): Promise<void> {
     await this.createSendTransport();
     await this.createRecvTransport();
+    
+    // Mark receive transport as ready and process pending producers
+    this.isRecvTransportReady = true;
+    console.log('[MediaSoup] ✅ Both transports created, processing pending producers:', this.pendingProducers.length);
+    
+    for (const producer of this.pendingProducers) {
+      try {
+        await this.consumeProducer(producer.socketId, producer.producerId, producer.kind);
+      } catch (error) {
+        console.error('[MediaSoup] Error consuming pending producer:', error);
+      }
+    }
+    this.pendingProducers = [];
   }
 
   private async createSendTransport(): Promise<void> {
     if (!this.socket || !this.device) throw new Error('Not initialized');
 
     return new Promise((resolve, reject) => {
-      console.log('[MediaSoup] Creating send transport');
+      console.log('[MediaSoup] Creating send transport...');
       
       this.socket!.emit('create-transport', { roomId: this.roomId, direction: 'send' }, async (params: any) => {
         if (params.error) {
+          console.error('[MediaSoup] Error creating send transport:', params.error);
           reject(new Error(params.error));
           return;
         }
 
         console.log('[MediaSoup] Send transport params received:', params.id);
 
-        this.sendTransport = this.device!.createSendTransport(params);
+        try {
+          this.sendTransport = this.device!.createSendTransport(params);
 
-        this.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-          console.log('[MediaSoup] Send transport connecting...');
-          this.socket!.emit('connect-transport', {
-            roomId: this.roomId,
-            transportId: this.sendTransport!.id,
-            dtlsParameters
-          }, (response: any) => {
-            if (response.error) {
-              errback(new Error(response.error));
-            } else {
-              console.log('[MediaSoup] Send transport connected');
-              callback();
-            }
+          this.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+            console.log('[MediaSoup] Send transport connecting...');
+            this.socket!.emit('connect-transport', {
+              roomId: this.roomId,
+              transportId: this.sendTransport!.id,
+              dtlsParameters
+            }, (response: any) => {
+              if (response.error) {
+                console.error('[MediaSoup] Send transport connect error:', response.error);
+                errback(new Error(response.error));
+              } else {
+                console.log('[MediaSoup] ✅ Send transport connected');
+                callback();
+              }
+            });
           });
-        });
 
-        this.sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
-          console.log(`[MediaSoup] Producing ${kind}...`);
-          this.socket!.emit('produce', {
-            roomId: this.roomId,
-            transportId: this.sendTransport!.id,
-            kind,
-            rtpParameters
-          }, (response: any) => {
-            if (response.error) {
-              errback(new Error(response.error));
-            } else {
-              console.log(`[MediaSoup] Producer created: ${response.id}`);
-              callback({ id: response.id });
-            }
+          this.sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
+            console.log(`[MediaSoup] Producing ${kind}...`);
+            this.socket!.emit('produce', {
+              roomId: this.roomId,
+              transportId: this.sendTransport!.id,
+              kind,
+              rtpParameters
+            }, (response: any) => {
+              if (response.error) {
+                console.error('[MediaSoup] Produce error:', response.error);
+                errback(new Error(response.error));
+              } else {
+                console.log(`[MediaSoup] ✅ Producer created: ${response.id} (${kind})`);
+                callback({ id: response.id });
+              }
+            });
           });
-        });
 
-        this.sendTransport.on('connectionstatechange', (state) => {
-          console.log('[MediaSoup] Send transport state:', state);
-        });
+          this.sendTransport.on('connectionstatechange', (state) => {
+            console.log('[MediaSoup] Send transport state:', state);
+          });
 
-        resolve();
+          resolve();
+        } catch (error) {
+          console.error('[MediaSoup] Error creating send transport:', error);
+          reject(error);
+        }
       });
     });
   }
@@ -211,39 +244,46 @@ export class MediaSoupClient {
     if (!this.socket || !this.device) throw new Error('Not initialized');
 
     return new Promise((resolve, reject) => {
-      console.log('[MediaSoup] Creating receive transport');
+      console.log('[MediaSoup] Creating receive transport...');
       
       this.socket!.emit('create-transport', { roomId: this.roomId, direction: 'receive' }, async (params: any) => {
         if (params.error) {
+          console.error('[MediaSoup] Error creating receive transport:', params.error);
           reject(new Error(params.error));
           return;
         }
 
         console.log('[MediaSoup] Receive transport params received:', params.id);
 
-        this.recvTransport = this.device!.createRecvTransport(params);
+        try {
+          this.recvTransport = this.device!.createRecvTransport(params);
 
-        this.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-          console.log('[MediaSoup] Receive transport connecting...');
-          this.socket!.emit('connect-transport', {
-            roomId: this.roomId,
-            transportId: this.recvTransport!.id,
-            dtlsParameters
-          }, (response: any) => {
-            if (response.error) {
-              errback(new Error(response.error));
-            } else {
-              console.log('[MediaSoup] Receive transport connected');
-              callback();
-            }
+          this.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+            console.log('[MediaSoup] Receive transport connecting...');
+            this.socket!.emit('connect-transport', {
+              roomId: this.roomId,
+              transportId: this.recvTransport!.id,
+              dtlsParameters
+            }, (response: any) => {
+              if (response.error) {
+                console.error('[MediaSoup] Receive transport connect error:', response.error);
+                errback(new Error(response.error));
+              } else {
+                console.log('[MediaSoup] ✅ Receive transport connected');
+                callback();
+              }
+            });
           });
-        });
 
-        this.recvTransport.on('connectionstatechange', (state) => {
-          console.log('[MediaSoup] Receive transport state:', state);
-        });
+          this.recvTransport.on('connectionstatechange', (state) => {
+            console.log('[MediaSoup] Receive transport state:', state);
+          });
 
-        resolve();
+          resolve();
+        } catch (error) {
+          console.error('[MediaSoup] Error creating receive transport:', error);
+          reject(error);
+        }
       });
     });
   }
@@ -267,22 +307,22 @@ export class MediaSoupClient {
         }
       });
 
-      console.log('[MediaSoup] Got local stream');
+      console.log('[MediaSoup] ✅ Got local stream with tracks:', this.localStream.getTracks().map(t => t.kind));
       this.onLocalStream?.(this.localStream);
 
       const videoTrack = this.localStream.getVideoTracks()[0];
       const audioTrack = this.localStream.getAudioTracks()[0];
 
       if (videoTrack) {
-        console.log('[MediaSoup] Producing video...');
+        console.log('[MediaSoup] Producing video track...');
         this.videoProducer = await this.sendTransport.produce({ track: videoTrack });
-        console.log('[MediaSoup] Video producer created:', this.videoProducer.id);
+        console.log('[MediaSoup] ✅ Video producer created:', this.videoProducer.id);
       }
 
       if (audioTrack) {
-        console.log('[MediaSoup] Producing audio...');
+        console.log('[MediaSoup] Producing audio track...');
         this.audioProducer = await this.sendTransport.produce({ track: audioTrack });
-        console.log('[MediaSoup] Audio producer created:', this.audioProducer.id);
+        console.log('[MediaSoup] ✅ Audio producer created:', this.audioProducer.id);
       }
 
       return this.localStream;
@@ -300,14 +340,19 @@ export class MediaSoupClient {
       
       this.socket!.emit('get-producers', { roomId: this.roomId }, async (response: any) => {
         if (response.error) {
+          console.error('[MediaSoup] Error getting producers:', response.error);
           reject(new Error(response.error));
           return;
         }
 
-        console.log('[MediaSoup] Existing producers:', response.producers);
+        console.log('[MediaSoup] 📋 Existing producers:', response.producers.length, response.producers);
 
         for (const producer of response.producers) {
-          await this.consumeProducer(producer.socketId, producer.producerId, producer.kind);
+          try {
+            await this.consumeProducer(producer.socketId, producer.producerId, producer.kind);
+          } catch (error) {
+            console.error('[MediaSoup] Error consuming existing producer:', error);
+          }
         }
 
         resolve();
@@ -317,13 +362,13 @@ export class MediaSoupClient {
 
   private async consumeProducer(socketId: string, producerId: string, kind: 'audio' | 'video'): Promise<void> {
     if (!this.socket || !this.recvTransport || !this.device) {
-      console.error('[MediaSoup] Cannot consume - not initialized');
+      console.error('[MediaSoup] Cannot consume - not initialized. Socket:', !!this.socket, 'RecvTransport:', !!this.recvTransport, 'Device:', !!this.device);
       return;
     }
 
-    return new Promise((resolve, reject) => {
-      console.log(`[MediaSoup] Consuming ${kind} from ${socketId}...`);
+    console.log(`[MediaSoup] 🔄 Consuming ${kind} from ${socketId} (producer: ${producerId})`);
 
+    return new Promise((resolve, reject) => {
       this.socket!.emit('consume', {
         roomId: this.roomId,
         transportId: this.recvTransport!.id,
@@ -331,12 +376,16 @@ export class MediaSoupClient {
         rtpCapabilities: this.device!.rtpCapabilities
       }, async (response: any) => {
         if (response.error) {
-          console.error('[MediaSoup] Error consuming:', response.error);
+          console.error('[MediaSoup] ❌ Error consuming:', response.error);
           reject(new Error(response.error));
           return;
         }
 
-        console.log(`[MediaSoup] Consumer params received for ${kind}:`, response.id);
+        console.log(`[MediaSoup] Consumer params received for ${kind}:`, {
+          id: response.id,
+          producerId: response.producerId,
+          kind: response.kind
+        });
 
         try {
           const consumer = await this.recvTransport!.consume({
@@ -346,23 +395,29 @@ export class MediaSoupClient {
             rtpParameters: response.rtpParameters
           });
 
-          console.log(`[MediaSoup] Consumer created: ${consumer.id}`);
+          console.log(`[MediaSoup] ✅ Consumer created: ${consumer.id} (${kind})`);
+          console.log(`[MediaSoup] Consumer track:`, consumer.track.kind, 'readyState:', consumer.track.readyState, 'enabled:', consumer.track.enabled);
+          
           this.consumers.set(consumer.id, consumer);
 
-          // Resume the consumer
-          this.socket!.emit('resume-consumer', { roomId: this.roomId, consumerId: consumer.id }, (resumeResponse: any) => {
-            if (resumeResponse.error) {
-              console.error('[MediaSoup] Error resuming consumer:', resumeResponse.error);
-            } else {
-              console.log(`[MediaSoup] Consumer resumed: ${consumer.id}`);
-            }
+          // Resume the consumer and wait for it
+          await new Promise<void>((resumeResolve, resumeReject) => {
+            this.socket!.emit('resume-consumer', { roomId: this.roomId, consumerId: consumer.id }, (resumeResponse: any) => {
+              if (resumeResponse.error) {
+                console.error('[MediaSoup] ❌ Error resuming consumer:', resumeResponse.error);
+                resumeReject(new Error(resumeResponse.error));
+              } else {
+                console.log(`[MediaSoup] ✅ Consumer resumed: ${consumer.id}`);
+                resumeResolve();
+              }
+            });
           });
 
-          // Add to remote streams
+          // Add to remote streams after resume
           this.addToRemoteStream(socketId, consumer, kind);
           resolve();
         } catch (error) {
-          console.error('[MediaSoup] Error creating consumer:', error);
+          console.error('[MediaSoup] ❌ Error creating/resuming consumer:', error);
           reject(error);
         }
       });
@@ -373,6 +428,7 @@ export class MediaSoupClient {
     let remoteStream = this.remoteStreams.get(socketId);
 
     if (!remoteStream) {
+      console.log(`[MediaSoup] Creating new remote stream for ${socketId}`);
       remoteStream = {
         socketId,
         username: this.peerUsernames.get(socketId) || 'Unknown',
@@ -381,8 +437,17 @@ export class MediaSoupClient {
       this.remoteStreams.set(socketId, remoteStream);
     }
 
+    // Check if track already exists
+    const existingTracks = remoteStream.stream.getTracks().filter(t => t.kind === kind);
+    if (existingTracks.length > 0) {
+      console.log(`[MediaSoup] Removing existing ${kind} track`);
+      existingTracks.forEach(t => remoteStream!.stream.removeTrack(t));
+    }
+
     // Add the track to the stream
-    remoteStream.stream.addTrack(consumer.track);
+    const track = consumer.track;
+    console.log(`[MediaSoup] Adding ${kind} track to stream. Track state:`, track.readyState, 'muted:', track.muted, 'enabled:', track.enabled);
+    remoteStream.stream.addTrack(track);
 
     if (kind === 'video') {
       remoteStream.videoConsumer = consumer;
@@ -390,8 +455,9 @@ export class MediaSoupClient {
       remoteStream.audioConsumer = consumer;
     }
 
-    console.log(`[MediaSoup] Added ${kind} track to remote stream for ${socketId}`);
-    console.log('[MediaSoup] Remote stream tracks:', remoteStream.stream.getTracks().map(t => t.kind));
+    console.log(`[MediaSoup] ✅ Added ${kind} track to remote stream for ${socketId}`);
+    console.log('[MediaSoup] Remote stream now has tracks:', remoteStream.stream.getTracks().map(t => ({ kind: t.kind, readyState: t.readyState, enabled: t.enabled })));
+    console.log('[MediaSoup] Total remote streams:', this.remoteStreams.size);
 
     // Notify about updated streams
     this.onRemoteStream?.(new Map(this.remoteStreams));
@@ -400,6 +466,7 @@ export class MediaSoupClient {
   private removeRemoteStream(socketId: string): void {
     const remoteStream = this.remoteStreams.get(socketId);
     if (remoteStream) {
+      console.log(`[MediaSoup] Removing remote stream for ${socketId}`);
       // Close consumers
       if (remoteStream.videoConsumer) {
         remoteStream.videoConsumer.close();
@@ -440,6 +507,9 @@ export class MediaSoupClient {
 
   async disconnect(): Promise<void> {
     console.log('[MediaSoup] Disconnecting...');
+
+    this.isRecvTransportReady = false;
+    this.pendingProducers = [];
 
     // Close producers
     if (this.videoProducer) {
