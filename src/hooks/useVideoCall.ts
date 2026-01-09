@@ -148,6 +148,17 @@ export function useVideoCall(): UseVideoCallReturn {
         });
       };
 
+      // Handle recording events
+      client.onRecordingStarted = (data) => {
+        console.log('[Hook] Recording started:', data);
+        setIsRecording(true);
+      };
+
+      client.onRecordingStopped = (data) => {
+        console.log('[Hook] Recording stopped:', data);
+        setIsRecording(false);
+      };
+
       // Connect to server
       await client.connect();
       setConnectionState('connected');
@@ -307,6 +318,14 @@ export function useVideoCall(): UseVideoCallReturn {
     }
   }, []);
 
+  // Update target language on server when changed
+  const handleLanguageChange = useCallback((language: string) => {
+    setSelectedLanguage(language);
+    if (clientRef.current) {
+      clientRef.current.setTargetLanguage(language);
+    }
+  }, []);
+
   return {
     connectionState,
     localStream,
@@ -330,7 +349,7 @@ export function useVideoCall(): UseVideoCallReturn {
     toggleScreenShare,
     toggleRecording,
     toggleTranscription,
-    setSelectedLanguage,
+    setSelectedLanguage: handleLanguageChange,
     sendChatMessage,
   };
 }
