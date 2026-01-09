@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { User, Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import { User, Mic, MicOff, VideoOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface VideoTileProps {
@@ -9,7 +9,6 @@ interface VideoTileProps {
   isMuted?: boolean;
   isVideoOff?: boolean;
   className?: string;
-  isSmall?: boolean;
 }
 
 export function VideoTile({
@@ -19,89 +18,51 @@ export function VideoTile({
   isMuted = false,
   isVideoOff = false,
   className,
-  isSmall = false,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasVideo, setHasVideo] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     const videoElement = videoRef.current;
     if (!videoElement || !stream) {
-      console.log(`[VideoTile ${username}] No video element or stream`);
       setHasVideo(false);
       return;
     }
 
-    console.log(`[VideoTile ${username}] Setting stream with tracks:`, stream.getTracks().map(t => ({ kind: t.kind, readyState: t.readyState, enabled: t.enabled })));
-    
-    // Set the stream
     videoElement.srcObject = stream;
     
-    // Check video tracks
     const checkVideoTracks = () => {
       const videoTracks = stream.getVideoTracks();
       const hasActiveVideo = videoTracks.length > 0 && videoTracks.some(track => track.readyState === 'live');
-      console.log(`[VideoTile ${username}] Video tracks check:`, { count: videoTracks.length, hasActiveVideo, tracks: videoTracks.map(t => ({ readyState: t.readyState, enabled: t.enabled })) });
       setHasVideo(hasActiveVideo);
     };
 
     checkVideoTracks();
 
-    // Try to play the video
     const playVideo = async () => {
       try {
         await videoElement.play();
-        setIsPlaying(true);
-        console.log(`[VideoTile ${username}] Video playing successfully`);
-      } catch (error) {
-        console.error(`[VideoTile ${username}] Error playing video:`, error);
-        // Try again with muted (autoplay policies)
+      } catch {
         videoElement.muted = true;
         try {
           await videoElement.play();
-          setIsPlaying(true);
-          console.log(`[VideoTile ${username}] Video playing (muted fallback)`);
         } catch (e) {
-          console.error(`[VideoTile ${username}] Still can't play:`, e);
+          console.error('Video play error:', e);
         }
       }
     };
 
     playVideo();
 
-    // Listen for track changes
-    const handleTrackChange = () => {
-      console.log(`[VideoTile ${username}] Track changed`);
-      checkVideoTracks();
-    };
-
-    stream.addEventListener('addtrack', handleTrackChange);
-    stream.addEventListener('removetrack', handleTrackChange);
-
-    // Listen for video events
-    const handleLoadedMetadata = () => {
-      console.log(`[VideoTile ${username}] Video metadata loaded`);
-      checkVideoTracks();
-    };
-
-    const handleCanPlay = () => {
-      console.log(`[VideoTile ${username}] Video can play`);
-      playVideo();
-    };
-
-    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
-    videoElement.addEventListener('canplay', handleCanPlay);
+    stream.addEventListener('addtrack', checkVideoTracks);
+    stream.addEventListener('removetrack', checkVideoTracks);
 
     return () => {
-      stream.removeEventListener('addtrack', handleTrackChange);
-      stream.removeEventListener('removetrack', handleTrackChange);
-      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      videoElement.removeEventListener('canplay', handleCanPlay);
+      stream.removeEventListener('addtrack', checkVideoTracks);
+      stream.removeEventListener('removetrack', checkVideoTracks);
     };
-  }, [stream, username]);
+  }, [stream]);
 
-  // Also check when isVideoOff changes
   useEffect(() => {
     if (stream && !isVideoOff) {
       const videoTracks = stream.getVideoTracks();
@@ -114,9 +75,7 @@ export function VideoTile({
   return (
     <div
       className={cn(
-        'relative overflow-hidden bg-video-bg border border-video-border transition-all duration-300',
-        isSmall ? 'rounded-lg' : 'rounded-xl',
-        'aspect-video',
+        'relative overflow-hidden bg-video-bg border border-video-border rounded-xl h-full w-full',
         className
       )}
     >
@@ -129,18 +88,15 @@ export function VideoTile({
         className={cn(
           'absolute inset-0 w-full h-full object-cover transition-opacity duration-300',
           showVideo ? 'opacity-100' : 'opacity-0',
-          isLocal && 'transform -scale-x-100' // Mirror local video
+          isLocal && 'transform -scale-x-100'
         )}
       />
 
       {/* Placeholder when no video */}
       {!showVideo && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-secondary to-muted">
-          <div className={cn(
-            'rounded-full bg-primary/20 flex items-center justify-center',
-            isSmall ? 'w-16 h-16' : 'w-24 h-24'
-          )}>
-            <User className={cn('text-primary', isSmall ? 'w-8 h-8' : 'w-12 h-12')} />
+          <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-primary/20 flex items-center justify-center">
+            <User className="w-10 h-10 md:w-12 md:h-12 text-primary" />
           </div>
         </div>
       )}
@@ -148,19 +104,10 @@ export function VideoTile({
       {/* Overlay gradient */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
 
-      {/* Username badge */}
-      <div className={cn(
-        'absolute bottom-0 left-0 right-0 p-2 flex items-center justify-between',
-        isSmall ? 'p-1.5' : 'p-3'
-      )}>
-        <div className={cn(
-          'glass-effect px-3 py-1.5 rounded-full flex items-center gap-2',
-          isSmall && 'px-2 py-1'
-        )}>
-          <span className={cn(
-            'font-medium text-foreground truncate max-w-[120px]',
-            isSmall ? 'text-xs' : 'text-sm'
-          )}>
+      {/* Username and status */}
+      <div className="absolute bottom-0 left-0 right-0 p-3 flex items-center justify-between">
+        <div className="glass-effect px-3 py-1.5 rounded-full flex items-center gap-2">
+          <span className="text-sm font-medium text-foreground truncate max-w-[140px]">
             {isLocal ? `${username} (You)` : username}
           </span>
         </div>
@@ -169,24 +116,16 @@ export function VideoTile({
         <div className="flex items-center gap-1.5">
           {isMuted && (
             <div className="glass-effect p-1.5 rounded-full">
-              <MicOff className={cn('text-destructive', isSmall ? 'w-3 h-3' : 'w-4 h-4')} />
+              <MicOff className="w-4 h-4 text-destructive" />
             </div>
           )}
           {isVideoOff && (
             <div className="glass-effect p-1.5 rounded-full">
-              <VideoOff className={cn('text-destructive', isSmall ? 'w-3 h-3' : 'w-4 h-4')} />
+              <VideoOff className="w-4 h-4 text-destructive" />
             </div>
           )}
         </div>
       </div>
-
-      {/* Debug info for remote streams */}
-      {!isLocal && (
-        <div className="absolute top-2 left-2 text-xs bg-black/50 px-2 py-1 rounded text-white">
-          {stream ? `Tracks: ${stream.getTracks().length}` : 'No stream'}
-          {isPlaying ? ' ▶️' : ' ⏸️'}
-        </div>
-      )}
     </div>
   );
 }
