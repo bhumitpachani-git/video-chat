@@ -11,6 +11,7 @@ export interface UseVideoCallReturn {
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
+  isRecording: boolean;
   isTranscribing: boolean;
   transcripts: TranscriptEntry[];
   selectedLanguage: string;
@@ -24,6 +25,7 @@ export interface UseVideoCallReturn {
   toggleVideo: () => void;
   toggleAudio: () => void;
   toggleScreenShare: () => Promise<void>;
+  toggleRecording: () => void;
   toggleTranscription: () => void;
   setSelectedLanguage: (language: string) => void;
   sendChatMessage: (message: string) => Promise<void>;
@@ -36,6 +38,7 @@ export function useVideoCall(): UseVideoCallReturn {
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
@@ -186,9 +189,10 @@ export function useVideoCall(): UseVideoCallReturn {
     setConnectionState('disconnected');
     setRoomId('');
     setUsername('');
-    setIsVideoEnabled(true);
+  setIsVideoEnabled(true);
     setIsAudioEnabled(true);
     setIsScreenSharing(false);
+    setIsRecording(false);
     setIsTranscribing(false);
     setTranscripts([]);
     setChatMessages([]);
@@ -285,6 +289,18 @@ export function useVideoCall(): UseVideoCallReturn {
     }
   }, [isTranscribing, localStream, selectedLanguage]);
 
+  const toggleRecording = useCallback(() => {
+    if (!clientRef.current) return;
+
+    if (isRecording) {
+      clientRef.current.stopRecording();
+      setIsRecording(false);
+    } else {
+      clientRef.current.startRecording();
+      setIsRecording(true);
+    }
+  }, [isRecording]);
+
   const sendChatMessage = useCallback(async (message: string) => {
     if (clientRef.current && message.trim()) {
       await clientRef.current.sendChatMessage(message.trim());
@@ -298,6 +314,7 @@ export function useVideoCall(): UseVideoCallReturn {
     isVideoEnabled,
     isAudioEnabled,
     isScreenSharing,
+    isRecording,
     isTranscribing,
     transcripts,
     selectedLanguage,
@@ -311,6 +328,7 @@ export function useVideoCall(): UseVideoCallReturn {
     toggleVideo,
     toggleAudio,
     toggleScreenShare,
+    toggleRecording,
     toggleTranscription,
     setSelectedLanguage,
     sendChatMessage,

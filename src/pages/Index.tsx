@@ -11,6 +11,7 @@ const Index = () => {
     isVideoEnabled,
     isAudioEnabled,
     isScreenSharing,
+    isRecording,
     isTranscribing,
     transcripts,
     selectedLanguage,
@@ -24,6 +25,7 @@ const Index = () => {
     toggleVideo,
     toggleAudio,
     toggleScreenShare,
+    toggleRecording,
     toggleTranscription,
     setSelectedLanguage,
     sendChatMessage,
@@ -43,6 +45,7 @@ const Index = () => {
         isVideoEnabled={isVideoEnabled}
         isAudioEnabled={isAudioEnabled}
         isScreenSharing={isScreenSharing}
+        isRecording={isRecording}
         chatMessages={chatMessages}
         transcripts={transcripts}
         isTranscribing={isTranscribing}
@@ -50,6 +53,7 @@ const Index = () => {
         onToggleVideo={toggleVideo}
         onToggleAudio={toggleAudio}
         onToggleScreenShare={toggleScreenShare}
+        onToggleRecording={toggleRecording}
         onToggleTranscription={toggleTranscription}
         onLanguageChange={setSelectedLanguage}
         onSendMessage={sendChatMessage}

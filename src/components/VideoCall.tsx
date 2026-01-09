@@ -15,6 +15,7 @@ interface VideoCallProps {
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
+  isRecording: boolean;
   chatMessages: ChatMessage[];
   transcripts: TranscriptEntry[];
   isTranscribing: boolean;
@@ -22,6 +23,7 @@ interface VideoCallProps {
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   onToggleScreenShare: () => void;
+  onToggleRecording: () => void;
   onToggleTranscription: () => void;
   onLanguageChange: (language: string) => void;
   onSendMessage: (message: string) => void;
@@ -37,6 +39,7 @@ export function VideoCall({
   isVideoEnabled,
   isAudioEnabled,
   isScreenSharing,
+  isRecording,
   chatMessages,
   transcripts,
   isTranscribing,
@@ -44,6 +47,7 @@ export function VideoCall({
   onToggleVideo,
   onToggleAudio,
   onToggleScreenShare,
+  onToggleRecording,
   onToggleTranscription,
   onLanguageChange,
   onSendMessage,
@@ -141,6 +145,7 @@ export function VideoCall({
         isAudioEnabled={isAudioEnabled}
         isScreenSharing={isScreenSharing}
         isTranscribing={isTranscribing}
+        isRecording={isRecording}
         roomId={roomId}
         hasUnreadMessages={hasUnreadMessages}
         onToggleVideo={onToggleVideo}
@@ -148,6 +153,7 @@ export function VideoCall({
         onToggleScreenShare={onToggleScreenShare}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
         onToggleTranscription={handleToggleTranscription}
+        onToggleRecording={onToggleRecording}
         onLeaveCall={onLeaveCall}
       />
     </div>
