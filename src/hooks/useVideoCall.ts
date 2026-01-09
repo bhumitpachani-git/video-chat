@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { MediaSoupClient, RemoteStream, Peer } from '@/lib/mediasoup';
+import { MediaSoupClient, RemoteStream, Peer, ChatMessage } from '@/lib/mediasoup';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'in-call' | 'error';
 
@@ -9,14 +9,18 @@ export interface UseVideoCallReturn {
   remoteStreams: Map<string, RemoteStream>;
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
+  isScreenSharing: boolean;
   error: string | null;
   roomId: string;
   username: string;
   socketId: string | undefined;
+  chatMessages: ChatMessage[];
   joinRoom: (roomId: string, username: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
   toggleVideo: () => void;
   toggleAudio: () => void;
+  toggleScreenShare: () => Promise<void>;
+  sendChatMessage: (message: string) => Promise<void>;
 }
 
 export function useVideoCall(): UseVideoCallReturn {
@@ -25,9 +29,11 @@ export function useVideoCall(): UseVideoCallReturn {
   const [remoteStreams, setRemoteStreams] = useState<Map<string, RemoteStream>>(new Map());
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [roomId, setRoomId] = useState('');
   const [username, setUsername] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   
   const clientRef = useRef<MediaSoupClient | null>(null);
 
@@ -45,6 +51,7 @@ export function useVideoCall(): UseVideoCallReturn {
       setConnectionState('connecting');
       setRoomId(roomId);
       setUsername(username);
+      setChatMessages([]);
 
       // Create new client
       const client = new MediaSoupClient();
@@ -80,6 +87,16 @@ export function useVideoCall(): UseVideoCallReturn {
         console.error('[Hook] Error:', err);
         setError(err);
         setConnectionState('error');
+      };
+
+      client.onScreenShareChange = (sharing) => {
+        console.log('[Hook] Screen share changed:', sharing);
+        setIsScreenSharing(sharing);
+      };
+
+      client.onChatMessage = (message) => {
+        console.log('[Hook] Chat message:', message);
+        setChatMessages(prev => [...prev, message]);
       };
 
       // Connect to server
@@ -125,6 +142,8 @@ export function useVideoCall(): UseVideoCallReturn {
     setUsername('');
     setIsVideoEnabled(true);
     setIsAudioEnabled(true);
+    setIsScreenSharing(false);
+    setChatMessages([]);
   }, []);
 
   const toggleVideo = useCallback(() => {
@@ -141,19 +160,39 @@ export function useVideoCall(): UseVideoCallReturn {
     }
   }, []);
 
+  const toggleScreenShare = useCallback(async () => {
+    if (!clientRef.current) return;
+
+    if (clientRef.current.isScreenSharing()) {
+      await clientRef.current.stopScreenShare();
+    } else {
+      await clientRef.current.startScreenShare();
+    }
+  }, []);
+
+  const sendChatMessage = useCallback(async (message: string) => {
+    if (clientRef.current && message.trim()) {
+      await clientRef.current.sendChatMessage(message.trim());
+    }
+  }, []);
+
   return {
     connectionState,
     localStream,
     remoteStreams,
     isVideoEnabled,
     isAudioEnabled,
+    isScreenSharing,
     error,
     roomId,
     username,
     socketId: clientRef.current?.getSocketId(),
+    chatMessages,
     joinRoom,
     leaveRoom,
     toggleVideo,
     toggleAudio,
+    toggleScreenShare,
+    sendChatMessage,
   };
 }

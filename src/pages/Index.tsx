@@ -10,13 +10,18 @@ const Index = () => {
     remoteStreams,
     isVideoEnabled,
     isAudioEnabled,
+    isScreenSharing,
     error,
     roomId,
     username,
+    socketId,
+    chatMessages,
     joinRoom,
     leaveRoom,
     toggleVideo,
     toggleAudio,
+    toggleScreenShare,
+    sendChatMessage,
   } = useVideoCall();
 
   const isConnecting = connectionState === 'connecting';
@@ -29,10 +34,15 @@ const Index = () => {
         remoteStreams={remoteStreams}
         username={username}
         roomId={roomId}
+        socketId={socketId}
         isVideoEnabled={isVideoEnabled}
         isAudioEnabled={isAudioEnabled}
+        isScreenSharing={isScreenSharing}
+        chatMessages={chatMessages}
         onToggleVideo={toggleVideo}
         onToggleAudio={toggleAudio}
+        onToggleScreenShare={toggleScreenShare}
+        onSendMessage={sendChatMessage}
         onLeaveCall={leaveRoom}
       />
     );

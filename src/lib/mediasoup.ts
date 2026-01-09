@@ -24,6 +24,15 @@ export interface RemoteStream {
   stream: MediaStream;
   videoConsumer?: Consumer;
   audioConsumer?: Consumer;
+  isScreenShare?: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  socketId: string;
+  username: string;
+  message: string;
+  timestamp: number;
 }
 
 export class MediaSoupClient {
@@ -33,9 +42,11 @@ export class MediaSoupClient {
   private recvTransport: Transport | null = null;
   private videoProducer: Producer | null = null;
   private audioProducer: Producer | null = null;
+  private screenProducer: Producer | null = null;
   private consumers: Map<string, Consumer> = new Map();
   private remoteStreams: Map<string, RemoteStream> = new Map();
   private localStream: MediaStream | null = null;
+  private screenStream: MediaStream | null = null;
   private roomId: string = '';
   private username: string = '';
   private peerUsernames: Map<string, string> = new Map();
@@ -49,6 +60,8 @@ export class MediaSoupClient {
   public onPeerLeft: ((socketId: string) => void) | null = null;
   public onConnectionStateChange: ((state: string) => void) | null = null;
   public onError: ((error: string) => void) | null = null;
+  public onScreenShareChange: ((isSharing: boolean) => void) | null = null;
+  public onChatMessage: ((message: ChatMessage) => void) | null = null;
 
   async connect(): Promise<Socket> {
     return new Promise((resolve, reject) => {
@@ -108,6 +121,12 @@ export class MediaSoupClient {
         this.peerUsernames.delete(socketId);
         this.removeRemoteStream(socketId);
         this.onPeerLeft?.(socketId);
+      });
+
+      // Handle chat messages
+      this.socket.on('chat-message', (message: ChatMessage) => {
+        console.log('[MediaSoup] 💬 Chat message received:', message);
+        this.onChatMessage?.(message);
       });
 
       setTimeout(() => {
@@ -332,6 +351,78 @@ export class MediaSoupClient {
     }
   }
 
+  async startScreenShare(): Promise<MediaStream | null> {
+    if (!this.sendTransport) throw new Error('Send transport not created');
+
+    try {
+      console.log('[MediaSoup] Starting screen share...');
+      this.screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
+        },
+        audio: false
+      });
+
+      const screenTrack = this.screenStream.getVideoTracks()[0];
+      
+      // Handle when user stops screen share from browser UI
+      screenTrack.onended = () => {
+        console.log('[MediaSoup] Screen share ended by user');
+        this.stopScreenShare();
+      };
+
+      this.screenProducer = await this.sendTransport.produce({ 
+        track: screenTrack,
+      });
+      
+      console.log('[MediaSoup] ✅ Screen share producer created:', this.screenProducer.id);
+      this.onScreenShareChange?.(true);
+      
+      return this.screenStream;
+    } catch (error) {
+      console.error('[MediaSoup] Error starting screen share:', error);
+      this.screenStream = null;
+      return null;
+    }
+  }
+
+  async stopScreenShare(): Promise<void> {
+    if (this.screenProducer) {
+      this.screenProducer.close();
+      this.screenProducer = null;
+    }
+    
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach(track => track.stop());
+      this.screenStream = null;
+    }
+    
+    console.log('[MediaSoup] Screen share stopped');
+    this.onScreenShareChange?.(false);
+  }
+
+  isScreenSharing(): boolean {
+    return this.screenProducer !== null && !this.screenProducer.closed;
+  }
+
+  async sendChatMessage(message: string): Promise<void> {
+    if (!this.socket || !this.roomId) return;
+    
+    const chatMessage: ChatMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      socketId: this.socket.id!,
+      username: this.username,
+      message,
+      timestamp: Date.now()
+    };
+    
+    this.socket.emit('chat-message', { roomId: this.roomId, ...chatMessage });
+    // Also trigger local callback
+    this.onChatMessage?.(chatMessage);
+  }
+
   async consumeExistingProducers(): Promise<void> {
     if (!this.socket) throw new Error('Not connected');
 
@@ -510,6 +601,9 @@ export class MediaSoupClient {
 
     this.isRecvTransportReady = false;
     this.pendingProducers = [];
+
+    // Stop screen share if active
+    await this.stopScreenShare();
 
     // Close producers
     if (this.videoProducer) {
