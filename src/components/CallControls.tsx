@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, Monitor, MonitorOff, MessageCircle } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, Monitor, MonitorOff, MessageCircle, Languages } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -8,12 +8,14 @@ interface CallControlsProps {
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
+  isTranscribing: boolean;
   roomId: string;
   hasUnreadMessages?: boolean;
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   onToggleScreenShare: () => void;
   onToggleChat: () => void;
+  onToggleTranscription: () => void;
   onLeaveCall: () => void;
 }
 
@@ -21,12 +23,14 @@ export function CallControls({
   isVideoEnabled,
   isAudioEnabled,
   isScreenSharing,
+  isTranscribing,
   roomId,
   hasUnreadMessages,
   onToggleVideo,
   onToggleAudio,
   onToggleScreenShare,
   onToggleChat,
+  onToggleTranscription,
   onLeaveCall,
 }: CallControlsProps) {
   const [copied, setCopied] = useState(false);
@@ -128,6 +132,21 @@ export function CallControls({
           {hasUnreadMessages && (
             <span className="absolute top-1 right-1 w-3 h-3 bg-primary rounded-full" />
           )}
+        </Button>
+
+        {/* Transcription toggle */}
+        <Button
+          variant="ghost"
+          size="lg"
+          onClick={onToggleTranscription}
+          className={cn(
+            'rounded-full w-12 h-12 md:w-14 md:h-14 p-0 transition-all duration-200',
+            isTranscribing 
+              ? 'bg-primary hover:bg-primary/90 text-primary-foreground' 
+              : 'bg-control hover:bg-control-hover text-foreground'
+          )}
+        >
+          <Languages className="w-5 h-5 md:w-6 md:h-6" />
         </Button>
 
         <div className="w-px h-8 bg-border" />
