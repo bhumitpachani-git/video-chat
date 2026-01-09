@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { VideoGrid } from './VideoGrid';
 import { CallControls } from './CallControls';
 import { ChatPanel } from './ChatPanel';
+import { TranscriptionPanel, TranscriptEntry } from './TranscriptionPanel';
 import { RemoteStream, ChatMessage } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
 
@@ -15,9 +16,14 @@ interface VideoCallProps {
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
   chatMessages: ChatMessage[];
+  transcripts: TranscriptEntry[];
+  isTranscribing: boolean;
+  selectedLanguage: string;
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   onToggleScreenShare: () => void;
+  onToggleTranscription: () => void;
+  onLanguageChange: (language: string) => void;
   onSendMessage: (message: string) => void;
   onLeaveCall: () => void;
 }
@@ -32,13 +38,19 @@ export function VideoCall({
   isAudioEnabled,
   isScreenSharing,
   chatMessages,
+  transcripts,
+  isTranscribing,
+  selectedLanguage,
   onToggleVideo,
   onToggleAudio,
   onToggleScreenShare,
+  onToggleTranscription,
+  onLanguageChange,
   onSendMessage,
   onLeaveCall,
 }: VideoCallProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isTranscriptionOpen, setIsTranscriptionOpen] = useState(false);
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
 
   const hasUnreadMessages = chatMessages.length > lastSeenMessageCount && !isChatOpen;
@@ -48,6 +60,13 @@ export function VideoCall({
       setLastSeenMessageCount(chatMessages.length);
     }
   }, [isChatOpen, chatMessages.length]);
+
+  const handleToggleTranscription = () => {
+    if (!isTranscribing && !isTranscriptionOpen) {
+      onToggleTranscription();
+    }
+    setIsTranscriptionOpen(!isTranscriptionOpen);
+  };
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -76,7 +95,7 @@ export function VideoCall({
         {/* Video area */}
         <main className={cn(
           'flex-1 relative pb-24 transition-all duration-300',
-          isChatOpen && 'lg:mr-80'
+          (isChatOpen || isTranscriptionOpen) && 'lg:mr-80'
         )}>
           <VideoGrid
             localStream={localStream}
@@ -99,6 +118,21 @@ export function VideoCall({
             onClose={() => setIsChatOpen(false)}
           />
         </div>
+
+        {/* Transcription panel */}
+        <div className={cn(
+          'fixed lg:absolute right-0 top-0 bottom-0 w-full sm:w-96 z-30 transition-transform duration-300',
+          isTranscriptionOpen ? 'translate-x-0' : 'translate-x-full'
+        )}>
+          <TranscriptionPanel
+            transcripts={transcripts}
+            currentSocketId={socketId}
+            selectedLanguage={selectedLanguage}
+            onLanguageChange={onLanguageChange}
+            onClose={() => setIsTranscriptionOpen(false)}
+            isTranscribing={isTranscribing}
+          />
+        </div>
       </div>
 
       {/* Controls */}
@@ -106,12 +140,14 @@ export function VideoCall({
         isVideoEnabled={isVideoEnabled}
         isAudioEnabled={isAudioEnabled}
         isScreenSharing={isScreenSharing}
+        isTranscribing={isTranscribing}
         roomId={roomId}
         hasUnreadMessages={hasUnreadMessages}
         onToggleVideo={onToggleVideo}
         onToggleAudio={onToggleAudio}
         onToggleScreenShare={onToggleScreenShare}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
+        onToggleTranscription={handleToggleTranscription}
         onLeaveCall={onLeaveCall}
       />
     </div>

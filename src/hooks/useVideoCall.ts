@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { MediaSoupClient, RemoteStream, Peer, ChatMessage } from '@/lib/mediasoup';
+import { TranscriptEntry } from '@/components/TranscriptionPanel';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'in-call' | 'error';
 
@@ -10,6 +11,9 @@ export interface UseVideoCallReturn {
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
+  isTranscribing: boolean;
+  transcripts: TranscriptEntry[];
+  selectedLanguage: string;
   error: string | null;
   roomId: string;
   username: string;
@@ -20,6 +24,8 @@ export interface UseVideoCallReturn {
   toggleVideo: () => void;
   toggleAudio: () => void;
   toggleScreenShare: () => Promise<void>;
+  toggleTranscription: () => void;
+  setSelectedLanguage: (language: string) => void;
   sendChatMessage: (message: string) => Promise<void>;
 }
 
@@ -30,12 +36,18 @@ export function useVideoCall(): UseVideoCallReturn {
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
+  const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [error, setError] = useState<string | null>(null);
   const [roomId, setRoomId] = useState('');
   const [username, setUsername] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   
   const clientRef = useRef<MediaSoupClient | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   useEffect(() => {
     return () => {
@@ -99,6 +111,40 @@ export function useVideoCall(): UseVideoCallReturn {
         setChatMessages(prev => [...prev, message]);
       };
 
+      // Handle transcription events
+      client.onTranscription = (data: {
+        id: string;
+        socketId: string;
+        username: string;
+        originalText: string;
+        translatedText?: string;
+        originalLanguage: string;
+        timestamp: string;
+        isFinal: boolean;
+      }) => {
+        setTranscripts(prev => {
+          if (!data.isFinal) {
+            const existingIndex = prev.findIndex(
+              t => t.socketId === data.socketId && !t.isFinal
+            );
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = {
+                ...data,
+                timestamp: new Date(data.timestamp),
+              };
+              return updated;
+            }
+          } else {
+            const filtered = prev.filter(
+              t => !(t.socketId === data.socketId && !t.isFinal)
+            );
+            return [...filtered, { ...data, timestamp: new Date(data.timestamp) }];
+          }
+          return [...prev, { ...data, timestamp: new Date(data.timestamp) }];
+        });
+      };
+
       // Connect to server
       await client.connect();
       setConnectionState('connected');
@@ -143,7 +189,23 @@ export function useVideoCall(): UseVideoCallReturn {
     setIsVideoEnabled(true);
     setIsAudioEnabled(true);
     setIsScreenSharing(false);
+    setIsTranscribing(false);
+    setTranscripts([]);
     setChatMessages([]);
+    
+    // Stop transcription audio processing
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
   }, []);
 
   const toggleVideo = useCallback(() => {
@@ -170,6 +232,59 @@ export function useVideoCall(): UseVideoCallReturn {
     }
   }, []);
 
+  const toggleTranscription = useCallback(() => {
+    if (!clientRef.current || !localStream) return;
+
+    if (isTranscribing) {
+      // Stop transcription
+      if (processorRef.current) {
+        processorRef.current.disconnect();
+        processorRef.current = null;
+      }
+      if (sourceRef.current) {
+        sourceRef.current.disconnect();
+        sourceRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      clientRef.current.stopTranscription();
+      setIsTranscribing(false);
+    } else {
+      // Start transcription
+      try {
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (!audioTrack) {
+          console.error('No audio track available');
+          return;
+        }
+
+        audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+        const audioStream = new MediaStream([audioTrack]);
+        sourceRef.current = audioContextRef.current.createMediaStreamSource(audioStream);
+        processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+
+        processorRef.current.onaudioprocess = (e) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          const int16Data = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            int16Data[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+          }
+          clientRef.current?.sendAudioChunk(Array.from(int16Data));
+        };
+
+        sourceRef.current.connect(processorRef.current);
+        processorRef.current.connect(audioContextRef.current.destination);
+
+        clientRef.current.startTranscription(selectedLanguage);
+        setIsTranscribing(true);
+      } catch (error) {
+        console.error('Failed to start transcription:', error);
+      }
+    }
+  }, [isTranscribing, localStream, selectedLanguage]);
+
   const sendChatMessage = useCallback(async (message: string) => {
     if (clientRef.current && message.trim()) {
       await clientRef.current.sendChatMessage(message.trim());
@@ -183,6 +298,9 @@ export function useVideoCall(): UseVideoCallReturn {
     isVideoEnabled,
     isAudioEnabled,
     isScreenSharing,
+    isTranscribing,
+    transcripts,
+    selectedLanguage,
     error,
     roomId,
     username,
@@ -193,6 +311,8 @@ export function useVideoCall(): UseVideoCallReturn {
     toggleVideo,
     toggleAudio,
     toggleScreenShare,
+    toggleTranscription,
+    setSelectedLanguage,
     sendChatMessage,
   };
 }

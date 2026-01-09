@@ -62,6 +62,16 @@ export class MediaSoupClient {
   public onError: ((error: string) => void) | null = null;
   public onScreenShareChange: ((isSharing: boolean) => void) | null = null;
   public onChatMessage: ((message: ChatMessage) => void) | null = null;
+  public onTranscription: ((data: {
+    id: string;
+    socketId: string;
+    username: string;
+    originalText: string;
+    translatedText?: string;
+    originalLanguage: string;
+    timestamp: string;
+    isFinal: boolean;
+  }) => void) | null = null;
 
   async connect(): Promise<Socket> {
     return new Promise((resolve, reject) => {
@@ -127,6 +137,21 @@ export class MediaSoupClient {
       this.socket.on('chat-message', (message: ChatMessage) => {
         console.log('[MediaSoup] 💬 Chat message received:', message);
         this.onChatMessage?.(message);
+      });
+
+      // Handle transcription events
+      this.socket.on('transcription', (data: {
+        id: string;
+        socketId: string;
+        username: string;
+        originalText: string;
+        translatedText?: string;
+        originalLanguage: string;
+        timestamp: string;
+        isFinal: boolean;
+      }) => {
+        console.log('[MediaSoup] 📝 Transcription received:', data);
+        this.onTranscription?.(data);
       });
 
       setTimeout(() => {
@@ -657,6 +682,42 @@ export class MediaSoupClient {
 
   getSocketId(): string | undefined {
     return this.socket?.id;
+  }
+
+  // Transcription methods
+  startTranscription(targetLanguage: string): void {
+    if (this.socket) {
+      this.socket.emit('start-transcription', { 
+        roomId: this.roomId, 
+        username: this.username,
+        targetLanguage 
+      });
+    }
+  }
+
+  stopTranscription(): void {
+    if (this.socket) {
+      this.socket.emit('stop-transcription', { roomId: this.roomId });
+    }
+  }
+
+  sendAudioChunk(audioData: number[]): void {
+    if (this.socket) {
+      this.socket.emit('audio-chunk', {
+        roomId: this.roomId,
+        username: this.username,
+        audioData,
+      });
+    }
+  }
+
+  setTargetLanguage(targetLanguage: string): void {
+    if (this.socket) {
+      this.socket.emit('set-target-language', { 
+        roomId: this.roomId, 
+        targetLanguage 
+      });
+    }
   }
 }
 

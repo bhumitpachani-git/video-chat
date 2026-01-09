@@ -11,6 +11,9 @@ const Index = () => {
     isVideoEnabled,
     isAudioEnabled,
     isScreenSharing,
+    isTranscribing,
+    transcripts,
+    selectedLanguage,
     error,
     roomId,
     username,
@@ -21,6 +24,8 @@ const Index = () => {
     toggleVideo,
     toggleAudio,
     toggleScreenShare,
+    toggleTranscription,
+    setSelectedLanguage,
     sendChatMessage,
   } = useVideoCall();
 
@@ -39,9 +44,14 @@ const Index = () => {
         isAudioEnabled={isAudioEnabled}
         isScreenSharing={isScreenSharing}
         chatMessages={chatMessages}
+        transcripts={transcripts}
+        isTranscribing={isTranscribing}
+        selectedLanguage={selectedLanguage}
         onToggleVideo={toggleVideo}
         onToggleAudio={toggleAudio}
         onToggleScreenShare={toggleScreenShare}
+        onToggleTranscription={toggleTranscription}
+        onLanguageChange={setSelectedLanguage}
         onSendMessage={sendChatMessage}
         onLeaveCall={leaveRoom}
       />
