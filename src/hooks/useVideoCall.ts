@@ -319,12 +319,12 @@ export function useVideoCall(): UseVideoCallReturn {
   }, []);
 
   // Update target language on server when changed
-  const handleLanguageChange = useCallback((language: string) => {
+  const handleLanguageChange = (language: string) => {
     setSelectedLanguage(language);
     if (clientRef.current) {
       clientRef.current.setTargetLanguage(language);
     }
-  }, []);
+  };
 
   return {
     connectionState,
