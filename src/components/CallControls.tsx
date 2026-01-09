@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, Monitor, MonitorOff, MessageCircle, Languages, Circle, Square } from 'lucide-react';
+import { 
+  Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, 
+  Monitor, MonitorOff, MessageCircle, Languages, Circle, Square,
+  MoreVertical
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface CallControlsProps {
   isVideoEnabled: boolean;
@@ -12,6 +22,8 @@ interface CallControlsProps {
   isRecording: boolean;
   roomId: string;
   hasUnreadMessages?: boolean;
+  isChatOpen?: boolean;
+  isTranscriptionOpen?: boolean;
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   onToggleScreenShare: () => void;
@@ -29,6 +41,8 @@ export function CallControls({
   isRecording,
   roomId,
   hasUnreadMessages,
+  isChatOpen,
+  isTranscriptionOpen,
   onToggleVideo,
   onToggleAudio,
   onToggleScreenShare,
@@ -46,16 +60,55 @@ export function CallControls({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const ControlButton = ({ 
+    onClick, 
+    isActive, 
+    isDestructive = false,
+    isPrimary = false,
+    children,
+    badge,
+    className,
+  }: { 
+    onClick: () => void; 
+    isActive?: boolean;
+    isDestructive?: boolean;
+    isPrimary?: boolean;
+    children: React.ReactNode;
+    badge?: boolean;
+    className?: string;
+  }) => (
+    <button
+      onClick={onClick}
+      className={cn(
+        'relative w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all duration-200',
+        'hover:scale-105 active:scale-95',
+        isDestructive && 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/30',
+        isPrimary && 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/30',
+        !isDestructive && !isPrimary && isActive && 'bg-primary/20 text-primary border border-primary/30',
+        !isDestructive && !isPrimary && !isActive && 'bg-secondary/80 hover:bg-secondary text-foreground border border-border/50',
+        className
+      )}
+    >
+      {children}
+      {badge && (
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center shadow-lg">
+          <span className="w-2 h-2 bg-primary-foreground rounded-full" />
+        </span>
+      )}
+    </button>
+  );
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-center items-center z-50">
-      <div className="glass-effect rounded-2xl px-4 md:px-6 py-3 md:py-4 flex items-center gap-2 md:gap-4 shadow-2xl border border-border">
-        {/* Room ID */}
+    <div className="fixed bottom-0 left-0 right-0 p-4 md:p-6 flex justify-center items-center z-50 pointer-events-none">
+      <div className="pointer-events-auto backdrop-blur-2xl bg-card/80 rounded-3xl px-4 md:px-6 py-4 flex items-center gap-2 md:gap-3 shadow-2xl border border-border/50">
+        
+        {/* Room ID - Desktop only */}
         <button
           onClick={copyRoomId}
-          className="hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors"
+          className="hidden xl:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-secondary/60 hover:bg-secondary transition-all border border-border/30"
         >
-          <span className="text-sm text-muted-foreground">Room:</span>
-          <span className="text-sm font-mono font-medium text-foreground">{roomId}</span>
+          <span className="text-xs text-muted-foreground">Room:</span>
+          <span className="text-sm font-mono font-semibold text-foreground">{roomId}</span>
           {copied ? (
             <Check className="w-4 h-4 text-success" />
           ) : (
@@ -63,126 +116,105 @@ export function CallControls({
           )}
         </button>
 
-        <div className="w-px h-8 bg-border hidden lg:block" />
+        <div className="hidden xl:block w-px h-10 bg-border/50" />
 
-        {/* Audio toggle */}
-        <Button
-          variant="ghost"
-          size="lg"
-          onClick={onToggleAudio}
-          className={cn(
-            'rounded-full w-12 h-12 md:w-14 md:h-14 p-0 transition-all duration-200',
-            isAudioEnabled 
-              ? 'bg-control hover:bg-control-hover text-foreground' 
-              : 'bg-destructive hover:bg-destructive/90 text-destructive-foreground'
-          )}
-        >
-          {isAudioEnabled ? (
-            <Mic className="w-5 h-5 md:w-6 md:h-6" />
-          ) : (
-            <MicOff className="w-5 h-5 md:w-6 md:h-6" />
-          )}
-        </Button>
+        {/* Primary controls */}
+        <div className="flex items-center gap-2 md:gap-3">
+          {/* Audio toggle */}
+          <ControlButton 
+            onClick={onToggleAudio} 
+            isDestructive={!isAudioEnabled}
+          >
+            {isAudioEnabled ? (
+              <Mic className="w-5 h-5 md:w-6 md:h-6" />
+            ) : (
+              <MicOff className="w-5 h-5 md:w-6 md:h-6" />
+            )}
+          </ControlButton>
 
-        {/* Video toggle */}
-        <Button
-          variant="ghost"
-          size="lg"
-          onClick={onToggleVideo}
-          className={cn(
-            'rounded-full w-12 h-12 md:w-14 md:h-14 p-0 transition-all duration-200',
-            isVideoEnabled 
-              ? 'bg-control hover:bg-control-hover text-foreground' 
-              : 'bg-destructive hover:bg-destructive/90 text-destructive-foreground'
-          )}
-        >
-          {isVideoEnabled ? (
-            <Video className="w-5 h-5 md:w-6 md:h-6" />
-          ) : (
-            <VideoOff className="w-5 h-5 md:w-6 md:h-6" />
-          )}
-        </Button>
+          {/* Video toggle */}
+          <ControlButton 
+            onClick={onToggleVideo} 
+            isDestructive={!isVideoEnabled}
+          >
+            {isVideoEnabled ? (
+              <Video className="w-5 h-5 md:w-6 md:h-6" />
+            ) : (
+              <VideoOff className="w-5 h-5 md:w-6 md:h-6" />
+            )}
+          </ControlButton>
 
-        {/* Screen share toggle */}
-        <Button
-          variant="ghost"
-          size="lg"
-          onClick={onToggleScreenShare}
-          className={cn(
-            'rounded-full w-12 h-12 md:w-14 md:h-14 p-0 transition-all duration-200',
-            isScreenSharing 
-              ? 'bg-primary hover:bg-primary/90 text-primary-foreground' 
-              : 'bg-control hover:bg-control-hover text-foreground'
-          )}
-        >
-          {isScreenSharing ? (
-            <MonitorOff className="w-5 h-5 md:w-6 md:h-6" />
-          ) : (
-            <Monitor className="w-5 h-5 md:w-6 md:h-6" />
-          )}
-        </Button>
+          {/* Screen share toggle */}
+          <ControlButton 
+            onClick={onToggleScreenShare} 
+            isPrimary={isScreenSharing}
+          >
+            {isScreenSharing ? (
+              <MonitorOff className="w-5 h-5 md:w-6 md:h-6" />
+            ) : (
+              <Monitor className="w-5 h-5 md:w-6 md:h-6" />
+            )}
+          </ControlButton>
+        </div>
 
-        {/* Chat toggle */}
-        <Button
-          variant="ghost"
-          size="lg"
-          onClick={onToggleChat}
-          className={cn(
-            'rounded-full w-12 h-12 md:w-14 md:h-14 p-0 transition-all duration-200 relative',
-            'bg-control hover:bg-control-hover text-foreground'
-          )}
-        >
-          <MessageCircle className="w-5 h-5 md:w-6 md:h-6" />
-          {hasUnreadMessages && (
-            <span className="absolute top-1 right-1 w-3 h-3 bg-primary rounded-full" />
-          )}
-        </Button>
+        <div className="w-px h-10 bg-border/50" />
 
-        {/* Transcription toggle */}
-        <Button
-          variant="ghost"
-          size="lg"
-          onClick={onToggleTranscription}
-          className={cn(
-            'rounded-full w-12 h-12 md:w-14 md:h-14 p-0 transition-all duration-200',
-            isTranscribing 
-              ? 'bg-primary hover:bg-primary/90 text-primary-foreground' 
-              : 'bg-control hover:bg-control-hover text-foreground'
-          )}
-        >
-          <Languages className="w-5 h-5 md:w-6 md:h-6" />
-        </Button>
+        {/* Secondary controls */}
+        <div className="flex items-center gap-2 md:gap-3">
+          {/* Chat toggle */}
+          <ControlButton 
+            onClick={onToggleChat} 
+            isActive={isChatOpen}
+            badge={hasUnreadMessages}
+          >
+            <MessageCircle className="w-5 h-5 md:w-6 md:h-6" />
+          </ControlButton>
 
-        {/* Recording toggle */}
-        <Button
-          variant="ghost"
-          size="lg"
-          onClick={onToggleRecording}
-          className={cn(
-            'rounded-full w-12 h-12 md:w-14 md:h-14 p-0 transition-all duration-200',
-            isRecording 
-              ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground animate-pulse' 
-              : 'bg-control hover:bg-control-hover text-foreground'
-          )}
-        >
-          {isRecording ? (
-            <Square className="w-5 h-5 md:w-6 md:h-6" />
-          ) : (
-            <Circle className="w-5 h-5 md:w-6 md:h-6 fill-current" />
-          )}
-        </Button>
+          {/* Transcription toggle */}
+          <ControlButton 
+            onClick={onToggleTranscription} 
+            isActive={isTranscriptionOpen || isTranscribing}
+          >
+            <Languages className="w-5 h-5 md:w-6 md:h-6" />
+          </ControlButton>
 
-        <div className="w-px h-8 bg-border" />
+          {/* Recording toggle */}
+          <ControlButton 
+            onClick={onToggleRecording} 
+            isDestructive={isRecording}
+            className={isRecording ? 'animate-pulse' : ''}
+          >
+            {isRecording ? (
+              <Square className="w-5 h-5 md:w-6 md:h-6" />
+            ) : (
+              <Circle className="w-5 h-5 md:w-6 md:h-6" />
+            )}
+          </ControlButton>
+        </div>
+
+        {/* Mobile more menu */}
+        <div className="xl:hidden">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center bg-secondary/80 hover:bg-secondary text-foreground border border-border/50 transition-all">
+                <MoreVertical className="w-5 h-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={copyRoomId}>
+                <Copy className="w-4 h-4 mr-2" />
+                Copy Room ID
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="w-px h-10 bg-border/50" />
 
         {/* Leave call */}
-        <Button
-          variant="destructive"
-          size="lg"
-          onClick={onLeaveCall}
-          className="rounded-full w-12 h-12 md:w-14 md:h-14 p-0 bg-destructive hover:bg-destructive/90"
-        >
+        <ControlButton onClick={onLeaveCall} isDestructive>
           <PhoneOff className="w-5 h-5 md:w-6 md:h-6" />
-        </Button>
+        </ControlButton>
       </div>
     </div>
   );

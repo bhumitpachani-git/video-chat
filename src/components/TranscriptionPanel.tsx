@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { X, Languages, Download, Loader2 } from 'lucide-react';
+import React, { useRef, useEffect } from 'react';
+import { X, Languages, Download, Loader2, Globe, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -26,18 +26,18 @@ interface TranscriptionPanelProps {
 }
 
 const SUPPORTED_LANGUAGES = [
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'it', name: 'Italian' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'zh', name: 'Chinese' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'ar', name: 'Arabic' },
-  { code: 'hi', name: 'Hindi' },
-  { code: 'ru', name: 'Russian' },
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+  { code: 'fr', name: 'French', flag: '🇫🇷' },
+  { code: 'de', name: 'German', flag: '🇩🇪' },
+  { code: 'it', name: 'Italian', flag: '🇮🇹' },
+  { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
+  { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+  { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+  { code: 'ko', name: 'Korean', flag: '🇰🇷' },
+  { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+  { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
+  { code: 'ru', name: 'Russian', flag: '🇷🇺' },
 ];
 
 export function TranscriptionPanel({
@@ -57,7 +57,7 @@ export function TranscriptionPanel({
   }, [transcripts]);
 
   const formatTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
   const downloadTranscript = () => {
@@ -75,37 +75,64 @@ export function TranscriptionPanel({
     URL.revokeObjectURL(url);
   };
 
+  const selectedLangInfo = SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage);
+
   return (
-    <div className="h-full flex flex-col bg-background border-l border-border">
+    <div className="h-full flex flex-col backdrop-blur-xl bg-card/95 border-l border-border/50 shadow-2xl">
       {/* Header */}
-      <div className="shrink-0 p-4 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Languages className="w-5 h-5 text-primary" />
-          <h2 className="font-semibold text-foreground">Live Transcription</h2>
-          {isTranscribing && (
-            <span className="flex items-center gap-1 text-xs text-green-500">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              Live
-            </span>
-          )}
+      <div className="shrink-0 p-4 border-b border-border/50 bg-secondary/30">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+              <Languages className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
+                Live Transcription
+                {isTranscribing && (
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-success/20 text-success text-xs font-medium">
+                    <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
+                    Live
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-muted-foreground">{transcripts.filter(t => t.isFinal).length} transcripts</p>
+            </div>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onClose}
+            className="h-9 w-9 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </Button>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="w-5 h-5" />
-        </Button>
       </div>
 
       {/* Language selector */}
-      <div className="shrink-0 p-3 border-b border-border">
-        <div className="flex items-center gap-2">
+      <div className="shrink-0 p-3 border-b border-border/50 bg-secondary/10">
+        <div className="flex items-center gap-3">
+          <Globe className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Translate to:</span>
           <Select value={selectedLanguage} onValueChange={onLanguageChange}>
-            <SelectTrigger className="flex-1">
-              <SelectValue />
+            <SelectTrigger className="flex-1 rounded-xl bg-background/80 border-border/50">
+              <SelectValue>
+                {selectedLangInfo && (
+                  <span className="flex items-center gap-2">
+                    <span>{selectedLangInfo.flag}</span>
+                    <span>{selectedLangInfo.name}</span>
+                  </span>
+                )}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {SUPPORTED_LANGUAGES.map(lang => (
                 <SelectItem key={lang.code} value={lang.code}>
-                  {lang.name}
+                  <span className="flex items-center gap-2">
+                    <span>{lang.flag}</span>
+                    <span>{lang.name}</span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -117,10 +144,12 @@ export function TranscriptionPanel({
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-3">
           {transcripts.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
-              <Languages className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Transcriptions will appear here</p>
-              <p className="text-xs mt-1">Start speaking to see real-time captions</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center mb-4">
+                <Sparkles className="w-10 h-10 text-primary/50" />
+              </div>
+              <p className="text-muted-foreground font-medium">Transcriptions will appear here</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Start speaking to see real-time captions</p>
             </div>
           ) : (
             transcripts.map((transcript) => {
@@ -129,36 +158,40 @@ export function TranscriptionPanel({
                 <div
                   key={transcript.id}
                   className={cn(
-                    'p-3 rounded-lg',
-                    isOwn ? 'bg-primary/10 ml-4' : 'bg-secondary/50 mr-4',
+                    'p-4 rounded-2xl transition-all duration-300',
+                    isOwn 
+                      ? 'bg-primary/10 border border-primary/20 ml-4' 
+                      : 'bg-secondary/50 border border-border/30 mr-4',
                     !transcript.isFinal && 'opacity-70'
                   )}
                 >
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <span className={cn(
-                      'text-xs font-medium',
-                      isOwn ? 'text-primary' : 'text-foreground'
+                      'text-xs font-semibold px-2 py-0.5 rounded-md',
+                      isOwn ? 'bg-primary/20 text-primary' : 'bg-secondary text-foreground'
                     )}>
                       {isOwn ? 'You' : transcript.username}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-[10px] text-muted-foreground font-mono">
                       {formatTime(transcript.timestamp)}
                     </span>
                   </div>
                   
                   {/* Translated text */}
                   <p className={cn(
-                    'text-sm text-foreground',
+                    'text-sm text-foreground leading-relaxed',
                     !transcript.isFinal && 'italic'
                   )}>
                     {transcript.translatedText || transcript.originalText}
-                    {!transcript.isFinal && <Loader2 className="inline w-3 h-3 ml-1 animate-spin" />}
+                    {!transcript.isFinal && (
+                      <Loader2 className="inline w-3 h-3 ml-2 animate-spin text-primary" />
+                    )}
                   </p>
                   
                   {/* Original text if different */}
                   {transcript.translatedText && transcript.translatedText !== transcript.originalText && (
-                    <p className="text-xs text-muted-foreground mt-1 italic">
-                      Original: {transcript.originalText}
+                    <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/30 italic">
+                      <span className="text-muted-foreground/70">Original:</span> {transcript.originalText}
                     </p>
                   )}
                 </div>
@@ -171,11 +204,10 @@ export function TranscriptionPanel({
 
       {/* Footer with download */}
       {transcripts.filter(t => t.isFinal).length > 0 && (
-        <div className="shrink-0 p-3 border-t border-border">
+        <div className="shrink-0 p-4 border-t border-border/50 bg-secondary/20">
           <Button
             variant="outline"
-            size="sm"
-            className="w-full"
+            className="w-full rounded-xl h-11 font-medium border-border/50 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
             onClick={downloadTranscript}
           >
             <Download className="w-4 h-4 mr-2" />
