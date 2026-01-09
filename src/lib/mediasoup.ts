@@ -719,6 +719,24 @@ export class MediaSoupClient {
       });
     }
   }
+
+  // Recording methods
+  startRecording(): void {
+    if (this.socket) {
+      console.log('[MediaSoup] Starting recording...');
+      this.socket.emit('start-recording', { 
+        roomId: this.roomId,
+        username: this.username 
+      });
+    }
+  }
+
+  stopRecording(): void {
+    if (this.socket) {
+      console.log('[MediaSoup] Stopping recording...');
+      this.socket.emit('stop-recording', { roomId: this.roomId });
+    }
+  }
 }
 
 export const createMediaSoupClient = () => new MediaSoupClient();

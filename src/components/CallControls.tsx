@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, Monitor, MonitorOff, MessageCircle, Languages } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, Monitor, MonitorOff, MessageCircle, Languages, Circle, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -9,6 +9,7 @@ interface CallControlsProps {
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
   isTranscribing: boolean;
+  isRecording: boolean;
   roomId: string;
   hasUnreadMessages?: boolean;
   onToggleVideo: () => void;
@@ -16,6 +17,7 @@ interface CallControlsProps {
   onToggleScreenShare: () => void;
   onToggleChat: () => void;
   onToggleTranscription: () => void;
+  onToggleRecording: () => void;
   onLeaveCall: () => void;
 }
 
@@ -24,6 +26,7 @@ export function CallControls({
   isAudioEnabled,
   isScreenSharing,
   isTranscribing,
+  isRecording,
   roomId,
   hasUnreadMessages,
   onToggleVideo,
@@ -31,6 +34,7 @@ export function CallControls({
   onToggleScreenShare,
   onToggleChat,
   onToggleTranscription,
+  onToggleRecording,
   onLeaveCall,
 }: CallControlsProps) {
   const [copied, setCopied] = useState(false);
@@ -147,6 +151,25 @@ export function CallControls({
           )}
         >
           <Languages className="w-5 h-5 md:w-6 md:h-6" />
+        </Button>
+
+        {/* Recording toggle */}
+        <Button
+          variant="ghost"
+          size="lg"
+          onClick={onToggleRecording}
+          className={cn(
+            'rounded-full w-12 h-12 md:w-14 md:h-14 p-0 transition-all duration-200',
+            isRecording 
+              ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground animate-pulse' 
+              : 'bg-control hover:bg-control-hover text-foreground'
+          )}
+        >
+          {isRecording ? (
+            <Square className="w-5 h-5 md:w-6 md:h-6" />
+          ) : (
+            <Circle className="w-5 h-5 md:w-6 md:h-6 fill-current" />
+          )}
         </Button>
 
         <div className="w-px h-8 bg-border" />
