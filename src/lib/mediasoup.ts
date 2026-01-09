@@ -72,6 +72,8 @@ export class MediaSoupClient {
     timestamp: string;
     isFinal: boolean;
   }) => void) | null = null;
+  public onRecordingStarted: ((data: { recordingId: string; startedBy: string; startedAt: string }) => void) | null = null;
+  public onRecordingStopped: ((data: { recordingId: string; downloadPath: string }) => void) | null = null;
 
   async connect(): Promise<Socket> {
     return new Promise((resolve, reject) => {
@@ -152,6 +154,17 @@ export class MediaSoupClient {
       }) => {
         console.log('[MediaSoup] 📝 Transcription received:', data);
         this.onTranscription?.(data);
+      });
+
+      // Handle recording events
+      this.socket.on('recording-started', (data: { recordingId: string; startedBy: string; startedAt: string }) => {
+        console.log('[MediaSoup] 🔴 Recording started:', data);
+        this.onRecordingStarted?.(data);
+      });
+
+      this.socket.on('recording-stopped', (data: { recordingId: string; downloadPath: string }) => {
+        console.log('[MediaSoup] ⏹️ Recording stopped:', data);
+        this.onRecordingStopped?.(data);
       });
 
       setTimeout(() => {
