@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, X, MessageCircle, Smile } from 'lucide-react';
+import { Send, X, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChatMessage } from '@/lib/mediasoup';
@@ -47,11 +47,11 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
   };
 
   return (
-    <div className="flex flex-col h-full backdrop-blur-xl bg-card/95 border-l border-border/50 shadow-2xl">
+    <div className="flex flex-col h-full glass-panel">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between p-4 border-b border-border/50 bg-secondary/30">
+      <div className="shrink-0 flex items-center justify-between p-4 border-b border-border/30 glass-header">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-primary/20 backdrop-blur-sm flex items-center justify-center border border-primary/20">
             <MessageCircle className="w-5 h-5 text-primary" />
           </div>
           <div>
@@ -63,7 +63,7 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
           variant="ghost" 
           size="icon" 
           onClick={onClose} 
-          className="h-9 w-9 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors"
+          className="h-9 w-9 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors backdrop-blur-sm"
         >
           <X className="h-5 w-5" />
         </Button>
@@ -73,7 +73,7 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
       <ScrollArea className="flex-1 p-4">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-12">
-            <div className="w-16 h-16 rounded-2xl bg-secondary/50 flex items-center justify-center mb-4">
+            <div className="w-16 h-16 rounded-2xl bg-muted/30 backdrop-blur-sm flex items-center justify-center mb-4 border border-border/30">
               <MessageCircle className="w-8 h-8 text-muted-foreground/50" />
             </div>
             <p className="text-muted-foreground text-sm font-medium">No messages yet</p>
@@ -96,7 +96,7 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
                   {/* Avatar */}
                   {!isOwn && showAvatar ? (
                     <div 
-                      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-sm font-semibold shadow-lg"
+                      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-sm font-semibold shadow-lg ring-2 ring-background/50"
                       style={{ backgroundColor: getAvatarColor(msg.username) }}
                     >
                       {msg.username.charAt(0).toUpperCase()}
@@ -116,10 +116,10 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
                     )}
                     <div
                       className={cn(
-                        'px-4 py-2.5 rounded-2xl text-sm shadow-md',
+                        'px-4 py-2.5 rounded-2xl text-sm shadow-lg backdrop-blur-sm',
                         isOwn
                           ? 'bg-primary text-primary-foreground rounded-br-md'
-                          : 'bg-secondary text-secondary-foreground rounded-bl-md'
+                          : 'bg-secondary/80 text-secondary-foreground rounded-bl-md border border-border/30'
                       )}
                     >
                       {msg.message}
@@ -137,7 +137,7 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
       </ScrollArea>
 
       {/* Input */}
-      <div className="shrink-0 p-4 border-t border-border/50 bg-secondary/20">
+      <div className="shrink-0 p-4 border-t border-border/30 glass-footer">
         <div className="flex gap-2 items-center">
           <div className="flex-1 relative">
             <Input
@@ -145,7 +145,7 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Type a message..."
-              className="pr-10 rounded-xl bg-background/80 border-border/50 focus:border-primary focus:ring-primary/20"
+              className="pr-10 rounded-xl bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary focus:ring-primary/20"
             />
           </div>
           <Button 

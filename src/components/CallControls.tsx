@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, 
   Monitor, MonitorOff, MessageCircle, Languages, Circle, Square,
-  MoreHorizontal, Share2, Volume2, Users, Maximize, Settings,
-  Wifi, WifiOff, Signal, SignalLow, SignalMedium, SignalHigh
+  MoreHorizontal, Share2, Volume2, Users, Maximize, Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -18,7 +17,8 @@ import {
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Slider } from '@/components/ui/slider';
-import { useNetworkStatus, getNetworkStatusColor, getNetworkStatusLabel } from '@/hooks/useNetworkStatus';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { NetworkIndicator } from '@/components/NetworkIndicator';
 
 interface CallControlsProps {
   isVideoEnabled: boolean;
@@ -118,23 +118,6 @@ export function CallControls({
     });
   };
 
-  const NetworkIcon = () => {
-    switch (networkStatus.type) {
-      case 'excellent':
-        return <SignalHigh className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
-      case 'good':
-        return <SignalMedium className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
-      case 'fair':
-        return <SignalLow className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
-      case 'poor':
-        return <Signal className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
-      case 'offline':
-        return <WifiOff className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
-      default:
-        return <Wifi className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
-    }
-  };
-
   const ControlButton = ({ 
     onClick, 
     active, 
@@ -176,11 +159,8 @@ export function CallControls({
       <div className="pointer-events-auto bg-card/95 backdrop-blur-lg rounded-full px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-1.5 sm:gap-2 shadow-xl border border-border">
         
         {/* Network status indicator */}
-        <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-full bg-muted/50 mr-1">
-          <NetworkIcon />
-          <span className={cn('text-xs font-medium', getNetworkStatusColor(networkStatus.type))}>
-            {networkStatus.rtt}ms
-          </span>
+        <div className="hidden sm:block mr-1">
+          <NetworkIndicator status={networkStatus} compact />
         </div>
 
         {/* Audio toggle */}
@@ -259,16 +239,7 @@ export function CallControls({
           <DropdownMenuContent align="center" side="top" className="mb-2 w-56">
             {/* Network Status - mobile only */}
             <div className="sm:hidden px-2 py-2 border-b border-border mb-1">
-              <div className="flex items-center gap-2 text-sm">
-                <NetworkIcon />
-                <span className={getNetworkStatusColor(networkStatus.type)}>
-                  {getNetworkStatusLabel(networkStatus)}
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {networkStatus.downlink > 0 && `${networkStatus.downlink.toFixed(1)} Mbps • `}
-                {networkStatus.effectiveType.toUpperCase()}
-              </div>
+              <NetworkIndicator status={networkStatus} showDetails />
             </div>
 
             <DropdownMenuItem onClick={copyRoomId}>

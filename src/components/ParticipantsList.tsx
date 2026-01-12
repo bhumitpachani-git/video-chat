@@ -1,8 +1,9 @@
 import React from 'react';
-import { X, Mic, MicOff, Video, VideoOff, Monitor } from 'lucide-react';
+import { X, Mic, MicOff, Video, VideoOff, Monitor, Volume2 } from 'lucide-react';
 import { RemoteStream, ScreenShareStream } from '@/lib/mediasoup';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 interface ParticipantsListProps {
   localUsername: string;
@@ -23,21 +24,37 @@ export function ParticipantsList({
   screenShareStreams,
   onClose,
 }: ParticipantsListProps) {
+  // Get actual status from streams
+  const getRemoteStatus = (stream: RemoteStream) => {
+    const audioTracks = stream.stream.getAudioTracks();
+    const videoTracks = stream.stream.getVideoTracks();
+    
+    return {
+      isAudioEnabled: audioTracks.some(t => t.readyState === 'live' && t.enabled),
+      isVideoEnabled: videoTracks.some(t => t.readyState === 'live' && t.enabled),
+    };
+  };
+
   const participants = [
     {
       id: 'local',
-      username: `${localUsername} (You)`,
+      username: localUsername,
+      isYou: true,
       isVideoEnabled: isLocalVideoEnabled,
       isAudioEnabled: isLocalAudioEnabled,
       isScreenSharing: isLocalScreenSharing,
     },
-    ...Array.from(remoteStreams.values()).map((stream) => ({
-      id: stream.socketId,
-      username: stream.username,
-      isVideoEnabled: stream.stream.getVideoTracks().some(t => t.enabled),
-      isAudioEnabled: stream.stream.getAudioTracks().some(t => t.enabled),
-      isScreenSharing: screenShareStreams.has(stream.socketId),
-    })),
+    ...Array.from(remoteStreams.values()).map((stream) => {
+      const status = getRemoteStatus(stream);
+      return {
+        id: stream.socketId,
+        username: stream.username,
+        isYou: false,
+        isVideoEnabled: status.isVideoEnabled,
+        isAudioEnabled: status.isAudioEnabled,
+        isScreenSharing: screenShareStreams.has(stream.socketId),
+      };
+    }),
   ];
 
   const getInitial = (name: string) => {
@@ -45,49 +62,66 @@ export function ParticipantsList({
   };
 
   const getAvatarColor = (name: string) => {
-    const colors = [
-      'bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500',
-      'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500'
-    ];
-    const index = name.charCodeAt(0) % colors.length;
-    return colors[index];
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const hue = hash % 360;
+    return `hsl(${hue}, 60%, 45%)`;
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full glass-panel">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <h2 className="text-lg font-semibold">Participants ({participants.length})</h2>
-        <button
+      <div className="flex items-center justify-between p-4 border-b border-border/30 glass-header">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/20 backdrop-blur-sm flex items-center justify-center border border-primary/20">
+            <Volume2 className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Participants</h2>
+            <p className="text-xs text-muted-foreground">{participants.length} in call</p>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onClose}
-          className="p-2 rounded-full hover:bg-muted transition-colors"
-          aria-label="Close"
+          className="h-9 w-9 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors backdrop-blur-sm"
         >
           <X className="w-5 h-5" />
-        </button>
+        </Button>
       </div>
 
       {/* Participants list */}
       <ScrollArea className="flex-1">
-        <div className="p-2">
+        <div className="p-3 space-y-1">
           {participants.map((participant) => (
             <div
               key={participant.id}
-              className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors"
+              className={cn(
+                'flex items-center gap-3 p-3 rounded-xl transition-all backdrop-blur-sm',
+                'hover:bg-muted/30 border border-transparent hover:border-border/30',
+                participant.isYou && 'bg-primary/5 border-primary/20'
+              )}
             >
               {/* Avatar */}
-              <div className={cn(
-                'w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm',
-                getAvatarColor(participant.username)
-              )}>
+              <div 
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ring-2 ring-background/50 shadow-lg"
+                style={{ backgroundColor: getAvatarColor(participant.username) }}
+              >
                 {getInitial(participant.username)}
               </div>
 
               {/* Name */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{participant.username}</p>
+                <p className="text-sm font-medium truncate flex items-center gap-2">
+                  {participant.username}
+                  {participant.isYou && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary font-medium">
+                      You
+                    </span>
+                  )}
+                </p>
                 {participant.isScreenSharing && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <p className="text-xs text-primary flex items-center gap-1 mt-0.5">
                     <Monitor className="w-3 h-3" />
                     Sharing screen
                   </p>
@@ -95,17 +129,31 @@ export function ParticipantsList({
               </div>
 
               {/* Status icons */}
-              <div className="flex items-center gap-2">
-                {participant.isAudioEnabled ? (
-                  <Mic className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <MicOff className="w-4 h-4 text-destructive" />
-                )}
-                {participant.isVideoEnabled ? (
-                  <Video className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <VideoOff className="w-4 h-4 text-destructive" />
-                )}
+              <div className="flex items-center gap-1.5">
+                <div className={cn(
+                  "w-7 h-7 rounded-full flex items-center justify-center transition-colors",
+                  participant.isAudioEnabled 
+                    ? "bg-success/20 text-success" 
+                    : "bg-destructive/20 text-destructive"
+                )}>
+                  {participant.isAudioEnabled ? (
+                    <Mic className="w-3.5 h-3.5" />
+                  ) : (
+                    <MicOff className="w-3.5 h-3.5" />
+                  )}
+                </div>
+                <div className={cn(
+                  "w-7 h-7 rounded-full flex items-center justify-center transition-colors",
+                  participant.isVideoEnabled 
+                    ? "bg-success/20 text-success" 
+                    : "bg-destructive/20 text-destructive"
+                )}>
+                  {participant.isVideoEnabled ? (
+                    <Video className="w-3.5 h-3.5" />
+                  ) : (
+                    <VideoOff className="w-3.5 h-3.5" />
+                  )}
+                </div>
               </div>
             </div>
           ))}
