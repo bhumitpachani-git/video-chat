@@ -3,13 +3,15 @@ import { VideoGrid } from './VideoGrid';
 import { CallControls } from './CallControls';
 import { ChatPanel } from './ChatPanel';
 import { TranscriptionPanel, TranscriptEntry } from './TranscriptionPanel';
-import { RemoteStream, ChatMessage } from '@/lib/mediasoup';
+import { RemoteStream, ChatMessage, ScreenShareStream } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
 import { Users, Shield, Wifi } from 'lucide-react';
 
 interface VideoCallProps {
   localStream: MediaStream | null;
+  localScreenStream: MediaStream | null;
   remoteStreams: Map<string, RemoteStream>;
+  screenShareStreams: Map<string, ScreenShareStream>;
   username: string;
   roomId: string;
   socketId?: string;
@@ -33,7 +35,9 @@ interface VideoCallProps {
 
 export function VideoCall({
   localStream,
+  localScreenStream,
   remoteStreams,
+  screenShareStreams,
   username,
   roomId,
   socketId,
@@ -138,10 +142,13 @@ export function VideoCall({
         )}>
           <VideoGrid
             localStream={localStream}
+            localScreenStream={localScreenStream}
             remoteStreams={remoteStreams}
+            screenShareStreams={screenShareStreams}
             username={username}
             isVideoEnabled={isVideoEnabled}
             isAudioEnabled={isAudioEnabled}
+            isScreenSharing={isScreenSharing}
           />
         </main>
 
