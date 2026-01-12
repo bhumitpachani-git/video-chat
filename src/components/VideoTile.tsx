@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Mic, MicOff, Video, VideoOff, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAudioProcessor } from '@/hooks/useAudioProcessor';
+import { useParticipantMediaStatus } from '@/hooks/useAdvancedAudioProcessor';
 
 interface VideoTileProps {
   stream: MediaStream | null;
@@ -18,8 +18,8 @@ export function VideoTile({
   stream,
   username,
   isLocal = false,
-  isMuted = false,
-  isVideoOff = false,
+  isMuted: propMuted,
+  isVideoOff: propVideoOff,
   isSpeaking: externalIsSpeaking,
   compact = false,
   className,
@@ -27,9 +27,14 @@ export function VideoTile({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasVideo, setHasVideo] = useState(false);
   
-  // Use audio processor for speaking detection
-  const { isSpeaking: detectedSpeaking, audioLevel } = useAudioProcessor(stream);
-  const isSpeaking = externalIsSpeaking ?? detectedSpeaking;
+  // Use actual media status detection
+  const actualStatus = useParticipantMediaStatus(stream, isLocal);
+  
+  // Use detected status if props are not explicitly provided
+  const isMuted = propMuted ?? actualStatus.isMuted;
+  const isVideoOff = propVideoOff ?? actualStatus.isVideoOff;
+  const isSpeaking = externalIsSpeaking ?? actualStatus.isSpeaking;
+  const audioLevel = actualStatus.audioLevel;
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -42,7 +47,8 @@ export function VideoTile({
     
     const checkVideoTracks = () => {
       const videoTracks = stream.getVideoTracks();
-      const hasActiveVideo = videoTracks.length > 0 && videoTracks.some(track => track.readyState === 'live');
+      const hasActiveVideo = videoTracks.length > 0 && 
+        videoTracks.some(track => track.readyState === 'live' && track.enabled);
       setHasVideo(hasActiveVideo);
     };
 
@@ -66,16 +72,29 @@ export function VideoTile({
     stream.addEventListener('addtrack', checkVideoTracks);
     stream.addEventListener('removetrack', checkVideoTracks);
 
+    // Also listen for track enable/disable
+    stream.getVideoTracks().forEach(track => {
+      track.addEventListener('mute', checkVideoTracks);
+      track.addEventListener('unmute', checkVideoTracks);
+    });
+
     return () => {
       stream.removeEventListener('addtrack', checkVideoTracks);
       stream.removeEventListener('removetrack', checkVideoTracks);
+      stream.getVideoTracks().forEach(track => {
+        track.removeEventListener('mute', checkVideoTracks);
+        track.removeEventListener('unmute', checkVideoTracks);
+      });
     };
   }, [stream]);
 
   useEffect(() => {
     if (stream && !isVideoOff) {
       const videoTracks = stream.getVideoTracks();
-      setHasVideo(videoTracks.length > 0 && videoTracks.some(track => track.readyState === 'live'));
+      setHasVideo(videoTracks.length > 0 && 
+        videoTracks.some(track => track.readyState === 'live' && track.enabled));
+    } else {
+      setHasVideo(false);
     }
   }, [isVideoOff, stream]);
 
@@ -93,7 +112,7 @@ export function VideoTile({
       'relative w-full h-full rounded-xl overflow-hidden bg-muted transition-all duration-200',
       compact ? 'min-h-[80px]' : 'min-h-[120px] sm:min-h-[180px]',
       // Speaking indicator ring
-      isSpeaking && !isMuted && 'ring-2 ring-green-500 ring-offset-2 ring-offset-background',
+      isSpeaking && !isMuted && 'ring-2 ring-success ring-offset-2 ring-offset-background',
       isLocal && !isSpeaking && 'ring-2 ring-primary/40',
       className
     )}>
@@ -117,7 +136,7 @@ export function VideoTile({
             className={cn(
               "rounded-full flex items-center justify-center transition-all duration-200",
               compact ? "w-10 h-10 sm:w-12 sm:h-12" : "w-16 h-16 sm:w-20 sm:h-20",
-              isSpeaking && !isMuted && "ring-4 ring-green-500 ring-offset-2 ring-offset-muted"
+              isSpeaking && !isMuted && "ring-4 ring-success ring-offset-2 ring-offset-muted"
             )}
             style={{ backgroundColor: getAvatarColor() }}
           >
@@ -135,15 +154,15 @@ export function VideoTile({
       {isSpeaking && !isMuted && (
         <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2">
           <div className={cn(
-            "flex items-center gap-0.5 px-1.5 py-1 rounded-full bg-green-500",
+            "flex items-center gap-0.5 px-1.5 py-1 rounded-full bg-success",
             compact ? "scale-75" : ""
           )}>
-            <Volume2 className="w-3 h-3 text-white animate-pulse" />
+            <Volume2 className="w-3 h-3 text-success-foreground animate-pulse" />
             <div className="flex items-center gap-0.5">
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="w-0.5 bg-white rounded-full animate-pulse"
+                  className="w-0.5 bg-success-foreground rounded-full animate-pulse"
                   style={{
                     height: `${Math.max(4, audioLevel * 100 * (i * 0.5))}px`,
                     animationDelay: `${i * 100}ms`,
@@ -164,12 +183,12 @@ export function VideoTile({
         <div className={cn(
           "rounded-full flex items-center justify-center transition-colors",
           compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7",
-          isMuted ? "bg-destructive" : "bg-green-500/80"
+          isMuted ? "bg-destructive" : "bg-success/90"
         )}>
           {isMuted ? (
-            <MicOff className={cn("text-white", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
+            <MicOff className={cn("text-destructive-foreground", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
           ) : (
-            <Mic className={cn("text-white", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
+            <Mic className={cn("text-success-foreground", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
           )}
         </div>
         
@@ -177,12 +196,12 @@ export function VideoTile({
         <div className={cn(
           "rounded-full flex items-center justify-center transition-colors",
           compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7",
-          isVideoOff ? "bg-destructive" : "bg-green-500/80"
+          isVideoOff ? "bg-destructive" : "bg-success/90"
         )}>
           {isVideoOff ? (
-            <VideoOff className={cn("text-white", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
+            <VideoOff className={cn("text-destructive-foreground", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
           ) : (
-            <Video className={cn("text-white", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
+            <Video className={cn("text-success-foreground", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
           )}
         </div>
       </div>
@@ -194,7 +213,7 @@ export function VideoTile({
           compact ? "text-xs" : "text-xs sm:text-sm"
         )}>
           {isSpeaking && !isMuted && (
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
           )}
           {isLocal ? 'You' : username}
         </span>
