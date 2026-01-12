@@ -3,6 +3,8 @@ import { VideoGrid } from './VideoGrid';
 import { CallControls } from './CallControls';
 import { ChatPanel } from './ChatPanel';
 import { TranscriptionPanel, TranscriptEntry } from './TranscriptionPanel';
+import { ParticipantsList } from './ParticipantsList';
+import { SettingsPanel } from './SettingsPanel';
 import { RemoteStream, ChatMessage, ScreenShareStream } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
 
@@ -32,6 +34,8 @@ interface VideoCallProps {
   onLeaveCall: () => void;
 }
 
+type PanelType = 'chat' | 'transcription' | 'participants' | 'settings' | null;
+
 export function VideoCall({
   localStream,
   localScreenStream,
@@ -57,41 +61,38 @@ export function VideoCall({
   onSendMessage,
   onLeaveCall,
 }: VideoCallProps) {
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isTranscriptionOpen, setIsTranscriptionOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelType>(null);
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
 
-  const hasUnreadMessages = chatMessages.length > lastSeenMessageCount && !isChatOpen;
+  const hasUnreadMessages = chatMessages.length > lastSeenMessageCount && activePanel !== 'chat';
+  const participantCount = 1 + remoteStreams.size;
 
   useEffect(() => {
-    if (isChatOpen) {
+    if (activePanel === 'chat') {
       setLastSeenMessageCount(chatMessages.length);
     }
-  }, [isChatOpen, chatMessages.length]);
+  }, [activePanel, chatMessages.length]);
 
-  const handleToggleTranscription = () => {
-    if (!isTranscribing && !isTranscriptionOpen) {
-      onToggleTranscription();
+  const togglePanel = (panel: PanelType) => {
+    if (activePanel === panel) {
+      setActivePanel(null);
+    } else {
+      setActivePanel(panel);
+      // Start transcription if opening transcription panel
+      if (panel === 'transcription' && !isTranscribing) {
+        onToggleTranscription();
+      }
     }
-    setIsTranscriptionOpen(!isTranscriptionOpen);
   };
 
-  const handleToggleChat = () => {
-    setIsChatOpen(!isChatOpen);
-    if (isTranscriptionOpen) setIsTranscriptionOpen(false);
-  };
-
-  const handleToggleTranscriptionPanel = () => {
-    handleToggleTranscription();
-    if (isChatOpen) setIsChatOpen(false);
-  };
+  const closePanel = () => setActivePanel(null);
 
   return (
     <div className="fixed inset-0 bg-background flex flex-col overflow-hidden">
       {/* Main video area - takes full screen */}
       <main className={cn(
         'flex-1 relative transition-all duration-300',
-        (isChatOpen || isTranscriptionOpen) && 'md:mr-80 lg:mr-96'
+        activePanel && 'md:mr-80 lg:mr-96'
       )}>
         <VideoGrid
           localStream={localStream}
@@ -113,30 +114,44 @@ export function VideoCall({
         )}
       </main>
 
-      {/* Side panel - Chat or Transcription */}
+      {/* Side panel */}
       <div className={cn(
         'fixed inset-y-0 right-0 w-full sm:w-80 lg:w-96 z-30',
         'bg-card border-l border-border',
         'transition-transform duration-300 ease-out',
-        (isChatOpen || isTranscriptionOpen) ? 'translate-x-0' : 'translate-x-full'
+        activePanel ? 'translate-x-0' : 'translate-x-full'
       )}>
-        {isChatOpen && (
+        {activePanel === 'chat' && (
           <ChatPanel
             messages={chatMessages}
             currentSocketId={socketId}
             onSendMessage={onSendMessage}
-            onClose={() => setIsChatOpen(false)}
+            onClose={closePanel}
           />
         )}
-        {isTranscriptionOpen && (
+        {activePanel === 'transcription' && (
           <TranscriptionPanel
             transcripts={transcripts}
             currentSocketId={socketId}
             selectedLanguage={selectedLanguage}
             onLanguageChange={onLanguageChange}
-            onClose={() => setIsTranscriptionOpen(false)}
+            onClose={closePanel}
             isTranscribing={isTranscribing}
           />
+        )}
+        {activePanel === 'participants' && (
+          <ParticipantsList
+            localUsername={username}
+            isLocalVideoEnabled={isVideoEnabled}
+            isLocalAudioEnabled={isAudioEnabled}
+            isLocalScreenSharing={isScreenSharing}
+            remoteStreams={remoteStreams}
+            screenShareStreams={screenShareStreams}
+            onClose={closePanel}
+          />
+        )}
+        {activePanel === 'settings' && (
+          <SettingsPanel onClose={closePanel} />
         )}
       </div>
 
@@ -149,14 +164,17 @@ export function VideoCall({
         isRecording={isRecording}
         roomId={roomId}
         hasUnreadMessages={hasUnreadMessages}
-        isChatOpen={isChatOpen}
-        isTranscriptionOpen={isTranscriptionOpen}
+        isChatOpen={activePanel === 'chat'}
+        isTranscriptionOpen={activePanel === 'transcription'}
+        participantCount={participantCount}
         onToggleVideo={onToggleVideo}
         onToggleAudio={onToggleAudio}
         onToggleScreenShare={onToggleScreenShare}
-        onToggleChat={handleToggleChat}
-        onToggleTranscription={handleToggleTranscriptionPanel}
+        onToggleChat={() => togglePanel('chat')}
+        onToggleTranscription={() => togglePanel('transcription')}
         onToggleRecording={onToggleRecording}
+        onToggleParticipants={() => togglePanel('participants')}
+        onToggleSettings={() => togglePanel('settings')}
         onLeaveCall={onLeaveCall}
       />
     </div>

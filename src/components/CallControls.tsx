@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, 
   Monitor, MonitorOff, MessageCircle, Languages, Circle, Square,
-  MoreHorizontal
+  MoreHorizontal, Share2, Volume2, Users, Maximize, Settings,
+  Wifi, WifiOff, Signal, SignalLow, SignalMedium, SignalHigh
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -10,8 +11,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Slider } from '@/components/ui/slider';
+import { useNetworkStatus, getNetworkStatusColor, getNetworkStatusLabel } from '@/hooks/useNetworkStatus';
 
 interface CallControlsProps {
   isVideoEnabled: boolean;
@@ -23,12 +30,15 @@ interface CallControlsProps {
   hasUnreadMessages?: boolean;
   isChatOpen?: boolean;
   isTranscriptionOpen?: boolean;
+  participantCount?: number;
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   onToggleScreenShare: () => void;
   onToggleChat: () => void;
   onToggleTranscription: () => void;
   onToggleRecording: () => void;
+  onToggleParticipants: () => void;
+  onToggleSettings: () => void;
   onLeaveCall: () => void;
 }
 
@@ -42,21 +52,87 @@ export function CallControls({
   hasUnreadMessages,
   isChatOpen,
   isTranscriptionOpen,
+  participantCount = 1,
   onToggleVideo,
   onToggleAudio,
   onToggleScreenShare,
   onToggleChat,
   onToggleTranscription,
   onToggleRecording,
+  onToggleParticipants,
+  onToggleSettings,
   onLeaveCall,
 }: CallControlsProps) {
   const [copied, setCopied] = useState(false);
+  const [volume, setVolume] = useState([80]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const networkStatus = useNetworkStatus();
 
   const copyRoomId = async () => {
     await navigator.clipboard.writeText(roomId);
     setCopied(true);
     toast.success('Room ID copied!');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareInvite = async () => {
+    const inviteLink = `${window.location.origin}?room=${roomId}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join my video call',
+          text: 'Click the link to join my video call',
+          url: inviteLink,
+        });
+      } catch (err) {
+        // User cancelled or share failed, copy to clipboard instead
+        await navigator.clipboard.writeText(inviteLink);
+        toast.success('Invite link copied!');
+      }
+    } else {
+      await navigator.clipboard.writeText(inviteLink);
+      toast.success('Invite link copied!');
+    }
+  };
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.error('Fullscreen error:', err);
+    }
+  };
+
+  const handleVolumeChange = (value: number[]) => {
+    setVolume(value);
+    // Apply volume to all audio elements
+    document.querySelectorAll('audio, video').forEach((element) => {
+      (element as HTMLMediaElement).volume = value[0] / 100;
+    });
+  };
+
+  const NetworkIcon = () => {
+    switch (networkStatus.type) {
+      case 'excellent':
+        return <SignalHigh className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
+      case 'good':
+        return <SignalMedium className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
+      case 'fair':
+        return <SignalLow className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
+      case 'poor':
+        return <Signal className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
+      case 'offline':
+        return <WifiOff className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
+      default:
+        return <Wifi className={cn('w-4 h-4', getNetworkStatusColor(networkStatus.type))} />;
+    }
   };
 
   const ControlButton = ({ 
@@ -99,6 +175,14 @@ export function CallControls({
     <div className="fixed bottom-0 inset-x-0 p-3 sm:p-4 flex justify-center z-40 pointer-events-none">
       <div className="pointer-events-auto bg-card/95 backdrop-blur-lg rounded-full px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-1.5 sm:gap-2 shadow-xl border border-border">
         
+        {/* Network status indicator */}
+        <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-full bg-muted/50 mr-1">
+          <NetworkIcon />
+          <span className={cn('text-xs font-medium', getNetworkStatusColor(networkStatus.type))}>
+            {networkStatus.rtt}ms
+          </span>
+        </div>
+
         {/* Audio toggle */}
         <ControlButton 
           onClick={onToggleAudio} 
@@ -150,6 +234,21 @@ export function CallControls({
           <MessageCircle className="w-5 h-5" />
         </ControlButton>
 
+        {/* Participants - visible on larger screens */}
+        <div className="hidden md:block">
+          <ControlButton 
+            onClick={onToggleParticipants}
+            label="Participants"
+          >
+            <div className="relative">
+              <Users className="w-5 h-5" />
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center text-[10px] font-bold bg-primary text-primary-foreground rounded-full px-0.5">
+                {participantCount}
+              </span>
+            </div>
+          </ControlButton>
+        </div>
+
         {/* More options */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -157,22 +256,95 @@ export function CallControls({
               <MoreHorizontal className="w-5 h-5" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="center" side="top" className="mb-2 w-48">
+          <DropdownMenuContent align="center" side="top" className="mb-2 w-56">
+            {/* Network Status - mobile only */}
+            <div className="sm:hidden px-2 py-2 border-b border-border mb-1">
+              <div className="flex items-center gap-2 text-sm">
+                <NetworkIcon />
+                <span className={getNetworkStatusColor(networkStatus.type)}>
+                  {getNetworkStatusLabel(networkStatus)}
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {networkStatus.downlink > 0 && `${networkStatus.downlink.toFixed(1)} Mbps • `}
+                {networkStatus.effectiveType.toUpperCase()}
+              </div>
+            </div>
+
             <DropdownMenuItem onClick={copyRoomId}>
               {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
               Copy Room ID
             </DropdownMenuItem>
+            
+            <DropdownMenuItem onClick={shareInvite}>
+              <Share2 className="w-4 h-4 mr-2" />
+              Share Invite
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onClick={onToggleRecording}>
+              {isRecording ? (
+                <>
+                  <Square className="w-4 h-4 mr-2 text-destructive" />
+                  <span className="text-destructive">Stop Recording</span>
+                </>
+              ) : (
+                <>
+                  <Circle className="w-4 h-4 mr-2" />
+                  Start Recording
+                </>
+              )}
+            </DropdownMenuItem>
+
+            {/* Volume submenu */}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Volume2 className="w-4 h-4 mr-2" />
+                Volume
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-48 p-3">
+                <div className="flex items-center gap-3">
+                  <Volume2 className="w-4 h-4 text-muted-foreground" />
+                  <Slider
+                    value={volume}
+                    onValueChange={handleVolumeChange}
+                    max={100}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-xs text-muted-foreground w-8">{volume[0]}%</span>
+                </div>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onClick={onToggleParticipants} className="md:hidden">
+              <Users className="w-4 h-4 mr-2" />
+              View Participants ({participantCount})
+            </DropdownMenuItem>
+
             <DropdownMenuItem onClick={onToggleTranscription} className="sm:hidden">
               <Languages className="w-4 h-4 mr-2" />
               {isTranscriptionOpen ? 'Close Transcription' : 'Transcription'}
             </DropdownMenuItem>
+
             <DropdownMenuItem onClick={onToggleScreenShare} className="sm:hidden">
               <Monitor className="w-4 h-4 mr-2" />
               {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onToggleRecording}>
-              {isRecording ? <Square className="w-4 h-4 mr-2" /> : <Circle className="w-4 h-4 mr-2" />}
-              {isRecording ? 'Stop Recording' : 'Start Recording'}
+
+            <DropdownMenuItem onClick={toggleFullscreen}>
+              <Maximize className="w-4 h-4 mr-2" />
+              {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onClick={onToggleSettings}>
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
