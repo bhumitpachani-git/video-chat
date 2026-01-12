@@ -373,7 +373,7 @@ export class MediaSoupClient {
   async startProducing(): Promise<MediaStream> {
     if (!this.sendTransport) throw new Error('Send transport not created');
 
-    console.log('[MediaSoup] Getting user media...');
+    console.log('[MediaSoup] Getting user media with enhanced audio processing...');
     
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -383,17 +383,43 @@ export class MediaSoupClient {
           frameRate: { ideal: 30 }
         },
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
+          // Enhanced noise cancellation settings
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          // Advanced constraints for better audio quality
+          channelCount: { ideal: 1 },
+          sampleRate: { ideal: 48000 },
+          sampleSize: { ideal: 16 },
+          // Additional noise reduction
+          // @ts-ignore - these are experimental but widely supported
+          googEchoCancellation: { ideal: true },
+          // @ts-ignore
+          googAutoGainControl: { ideal: true },
+          // @ts-ignore
+          googNoiseSuppression: { ideal: true },
+          // @ts-ignore
+          googHighpassFilter: { ideal: true },
         }
       });
 
       console.log('[MediaSoup] ✅ Got local stream with tracks:', this.localStream.getTracks().map(t => t.kind));
+      
+      // Log audio constraints applied
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        const settings = audioTrack.getSettings();
+        console.log('[MediaSoup] Audio settings applied:', {
+          echoCancellation: settings.echoCancellation,
+          noiseSuppression: settings.noiseSuppression,
+          autoGainControl: settings.autoGainControl,
+          sampleRate: settings.sampleRate,
+        });
+      }
+      
       this.onLocalStream?.(this.localStream);
 
       const videoTrack = this.localStream.getVideoTracks()[0];
-      const audioTrack = this.localStream.getAudioTracks()[0];
 
       if (videoTrack) {
         console.log('[MediaSoup] Producing video track...');
