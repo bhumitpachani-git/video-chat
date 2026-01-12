@@ -7,7 +7,9 @@ const Index = () => {
   const {
     connectionState,
     localStream,
+    localScreenStream,
     remoteStreams,
+    screenShareStreams,
     isVideoEnabled,
     isAudioEnabled,
     isScreenSharing,
@@ -38,7 +40,9 @@ const Index = () => {
     return (
       <VideoCall
         localStream={localStream}
+        localScreenStream={localScreenStream}
         remoteStreams={remoteStreams}
+        screenShareStreams={screenShareStreams}
         username={username}
         roomId={roomId}
         socketId={socketId}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { MediaSoupClient, RemoteStream, Peer, ChatMessage } from '@/lib/mediasoup';
+import { MediaSoupClient, RemoteStream, Peer, ChatMessage, ScreenShareStream } from '@/lib/mediasoup';
 import { TranscriptEntry } from '@/components/TranscriptionPanel';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'in-call' | 'error';
@@ -7,7 +7,9 @@ export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'in-
 export interface UseVideoCallReturn {
   connectionState: ConnectionState;
   localStream: MediaStream | null;
+  localScreenStream: MediaStream | null;
   remoteStreams: Map<string, RemoteStream>;
+  screenShareStreams: Map<string, ScreenShareStream>;
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
@@ -34,7 +36,9 @@ export interface UseVideoCallReturn {
 export function useVideoCall(): UseVideoCallReturn {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Map<string, RemoteStream>>(new Map());
+  const [screenShareStreams, setScreenShareStreams] = useState<Map<string, ScreenShareStream>>(new Map());
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -82,6 +86,11 @@ export function useVideoCall(): UseVideoCallReturn {
         console.log('[Hook] Remote streams updated:', streams.size);
         setRemoteStreams(new Map(streams));
       };
+      
+      client.onScreenShareStream = (streams) => {
+        console.log('[Hook] Screen share streams updated:', streams.size);
+        setScreenShareStreams(new Map(streams));
+      };
 
       client.onPeerJoined = (peer: Peer) => {
         console.log('[Hook] Peer joined:', peer.username);
@@ -107,6 +116,9 @@ export function useVideoCall(): UseVideoCallReturn {
       client.onScreenShareChange = (sharing) => {
         console.log('[Hook] Screen share changed:', sharing);
         setIsScreenSharing(sharing);
+        if (!sharing) {
+          setLocalScreenStream(null);
+        }
       };
 
       client.onChatMessage = (message) => {
@@ -196,11 +208,13 @@ export function useVideoCall(): UseVideoCallReturn {
       clientRef.current = null;
     }
     setLocalStream(null);
+    setLocalScreenStream(null);
     setRemoteStreams(new Map());
+    setScreenShareStreams(new Map());
     setConnectionState('disconnected');
     setRoomId('');
     setUsername('');
-  setIsVideoEnabled(true);
+    setIsVideoEnabled(true);
     setIsAudioEnabled(true);
     setIsScreenSharing(false);
     setIsRecording(false);
@@ -242,8 +256,12 @@ export function useVideoCall(): UseVideoCallReturn {
 
     if (clientRef.current.isScreenSharing()) {
       await clientRef.current.stopScreenShare();
+      setLocalScreenStream(null);
     } else {
-      await clientRef.current.startScreenShare();
+      const screenStream = await clientRef.current.startScreenShare();
+      if (screenStream) {
+        setLocalScreenStream(screenStream);
+      }
     }
   }, []);
 
@@ -329,7 +347,9 @@ export function useVideoCall(): UseVideoCallReturn {
   return {
     connectionState,
     localStream,
+    localScreenStream,
     remoteStreams,
+    screenShareStreams,
     isVideoEnabled,
     isAudioEnabled,
     isScreenSharing,

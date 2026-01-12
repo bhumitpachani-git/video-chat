@@ -27,12 +27,23 @@ export interface RemoteStream {
   isScreenShare?: boolean;
 }
 
+export interface ScreenShareStream {
+  socketId: string;
+  username: string;
+  stream: MediaStream;
+  consumer: Consumer;
+}
+
 export interface ChatMessage {
   id: string;
   socketId: string;
   username: string;
   message: string;
   timestamp: number;
+}
+
+export interface ProducerInfoWithType extends ProducerInfo {
+  isScreenShare?: boolean;
 }
 
 export class MediaSoupClient {
@@ -45,17 +56,20 @@ export class MediaSoupClient {
   private screenProducer: Producer | null = null;
   private consumers: Map<string, Consumer> = new Map();
   private remoteStreams: Map<string, RemoteStream> = new Map();
+  private screenShareStreams: Map<string, ScreenShareStream> = new Map();
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
   private roomId: string = '';
   private username: string = '';
   private peerUsernames: Map<string, string> = new Map();
-  private pendingProducers: ProducerInfo[] = [];
+  private pendingProducers: ProducerInfoWithType[] = [];
   private isRecvTransportReady: boolean = false;
+  private screenShareProducerIds: Set<string> = new Set();
 
   // Callbacks
   public onLocalStream: ((stream: MediaStream) => void) | null = null;
   public onRemoteStream: ((streams: Map<string, RemoteStream>) => void) | null = null;
+  public onScreenShareStream: ((streams: Map<string, ScreenShareStream>) => void) | null = null;
   public onPeerJoined: ((peer: Peer) => void) | null = null;
   public onPeerLeft: ((socketId: string) => void) | null = null;
   public onConnectionStateChange: ((state: string) => void) | null = null;
@@ -104,20 +118,31 @@ export class MediaSoupClient {
       });
 
       // Handle new producer from other peers
-      this.socket.on('new-producer', async ({ socketId, producerId, kind }: ProducerInfo) => {
-        console.log(`[MediaSoup] 🎬 New producer event: ${producerId} (${kind}) from ${socketId}`);
+      this.socket.on('new-producer', async ({ socketId, producerId, kind, isScreenShare }: ProducerInfoWithType) => {
+        console.log(`[MediaSoup] 🎬 New producer event: ${producerId} (${kind}) from ${socketId}, isScreenShare: ${isScreenShare}`);
+        
+        if (isScreenShare) {
+          this.screenShareProducerIds.add(producerId);
+        }
         
         if (!this.isRecvTransportReady) {
           console.log('[MediaSoup] Receive transport not ready, queuing producer');
-          this.pendingProducers.push({ socketId, producerId, kind });
+          this.pendingProducers.push({ socketId, producerId, kind, isScreenShare });
           return;
         }
         
         try {
-          await this.consumeProducer(socketId, producerId, kind);
+          await this.consumeProducer(socketId, producerId, kind, isScreenShare);
         } catch (error) {
           console.error('[MediaSoup] Error consuming new producer:', error);
         }
+      });
+
+      // Handle screen share stopped
+      this.socket.on('screen-share-stopped', ({ socketId, producerId }: { socketId: string; producerId: string }) => {
+        console.log(`[MediaSoup] 📺 Screen share stopped from ${socketId}`);
+        this.screenShareProducerIds.delete(producerId);
+        this.removeScreenShareStream(socketId);
       });
 
       // Handle user joined
@@ -223,7 +248,7 @@ export class MediaSoupClient {
     
     for (const producer of this.pendingProducers) {
       try {
-        await this.consumeProducer(producer.socketId, producer.producerId, producer.kind);
+        await this.consumeProducer(producer.socketId, producer.producerId, producer.kind, producer.isScreenShare);
       } catch (error) {
         console.error('[MediaSoup] Error consuming pending producer:', error);
       }
@@ -390,7 +415,7 @@ export class MediaSoupClient {
   }
 
   async startScreenShare(): Promise<MediaStream | null> {
-    if (!this.sendTransport) throw new Error('Send transport not created');
+    if (!this.sendTransport || !this.socket) throw new Error('Send transport not created');
 
     try {
       console.log('[MediaSoup] Starting screen share...');
@@ -411,11 +436,20 @@ export class MediaSoupClient {
         this.stopScreenShare();
       };
 
+      // Produce with appData to mark as screen share
       this.screenProducer = await this.sendTransport.produce({ 
         track: screenTrack,
+        appData: { isScreenShare: true }
       });
       
       console.log('[MediaSoup] ✅ Screen share producer created:', this.screenProducer.id);
+      
+      // Notify server this is a screen share producer
+      this.socket.emit('mark-screen-share', { 
+        roomId: this.roomId, 
+        producerId: this.screenProducer.id 
+      });
+      
       this.onScreenShareChange?.(true);
       
       return this.screenStream;
@@ -427,6 +461,8 @@ export class MediaSoupClient {
   }
 
   async stopScreenShare(): Promise<void> {
+    const producerId = this.screenProducer?.id;
+    
     if (this.screenProducer) {
       this.screenProducer.close();
       this.screenProducer = null;
@@ -435,6 +471,14 @@ export class MediaSoupClient {
     if (this.screenStream) {
       this.screenStream.getTracks().forEach(track => track.stop());
       this.screenStream = null;
+    }
+    
+    // Notify server that screen share stopped
+    if (this.socket && producerId) {
+      this.socket.emit('screen-share-stopped', { 
+        roomId: this.roomId, 
+        producerId 
+      });
     }
     
     console.log('[MediaSoup] Screen share stopped');
@@ -478,7 +522,8 @@ export class MediaSoupClient {
 
         for (const producer of response.producers) {
           try {
-            await this.consumeProducer(producer.socketId, producer.producerId, producer.kind);
+            const isScreenShare = producer.isScreenShare || this.screenShareProducerIds.has(producer.producerId);
+            await this.consumeProducer(producer.socketId, producer.producerId, producer.kind, isScreenShare);
           } catch (error) {
             console.error('[MediaSoup] Error consuming existing producer:', error);
           }
@@ -489,13 +534,13 @@ export class MediaSoupClient {
     });
   }
 
-  private async consumeProducer(socketId: string, producerId: string, kind: 'audio' | 'video'): Promise<void> {
+  private async consumeProducer(socketId: string, producerId: string, kind: 'audio' | 'video', isScreenShare?: boolean): Promise<void> {
     if (!this.socket || !this.recvTransport || !this.device) {
       console.error('[MediaSoup] Cannot consume - not initialized. Socket:', !!this.socket, 'RecvTransport:', !!this.recvTransport, 'Device:', !!this.device);
       return;
     }
 
-    console.log(`[MediaSoup] 🔄 Consuming ${kind} from ${socketId} (producer: ${producerId})`);
+    console.log(`[MediaSoup] 🔄 Consuming ${kind} from ${socketId} (producer: ${producerId}, screenShare: ${isScreenShare})`);
 
     return new Promise((resolve, reject) => {
       this.socket!.emit('consume', {
@@ -542,8 +587,12 @@ export class MediaSoupClient {
             });
           });
 
-          // Add to remote streams after resume
-          this.addToRemoteStream(socketId, consumer, kind);
+          // Add to appropriate stream collection after resume
+          if (isScreenShare && kind === 'video') {
+            this.addToScreenShareStream(socketId, consumer);
+          } else {
+            this.addToRemoteStream(socketId, consumer, kind);
+          }
           resolve();
         } catch (error) {
           console.error('[MediaSoup] ❌ Error creating/resuming consumer:', error);
@@ -551,6 +600,36 @@ export class MediaSoupClient {
         }
       });
     });
+  }
+
+  private addToScreenShareStream(socketId: string, consumer: Consumer): void {
+    console.log(`[MediaSoup] 📺 Creating screen share stream for ${socketId}`);
+    
+    const screenShareStream: ScreenShareStream = {
+      socketId,
+      username: this.peerUsernames.get(socketId) || 'Unknown',
+      stream: new MediaStream([consumer.track]),
+      consumer
+    };
+    
+    this.screenShareStreams.set(socketId, screenShareStream);
+    
+    console.log(`[MediaSoup] ✅ Screen share stream added for ${socketId}`);
+    console.log('[MediaSoup] Total screen share streams:', this.screenShareStreams.size);
+    
+    this.onScreenShareStream?.(new Map(this.screenShareStreams));
+  }
+
+  private removeScreenShareStream(socketId: string): void {
+    const screenShareStream = this.screenShareStreams.get(socketId);
+    if (screenShareStream) {
+      console.log(`[MediaSoup] Removing screen share stream for ${socketId}`);
+      screenShareStream.consumer.close();
+      this.consumers.delete(screenShareStream.consumer.id);
+      screenShareStream.stream.getTracks().forEach(track => track.stop());
+      this.screenShareStreams.delete(socketId);
+      this.onScreenShareStream?.(new Map(this.screenShareStreams));
+    }
   }
 
   private addToRemoteStream(socketId: string, consumer: Consumer, kind: 'audio' | 'video'): void {
@@ -610,6 +689,9 @@ export class MediaSoupClient {
       this.remoteStreams.delete(socketId);
       this.onRemoteStream?.(new Map(this.remoteStreams));
     }
+    
+    // Also remove any screen share stream from this user
+    this.removeScreenShareStream(socketId);
   }
 
   toggleVideo(): boolean {
@@ -678,6 +760,13 @@ export class MediaSoupClient {
       stream.stream.getTracks().forEach(track => track.stop());
     });
     this.remoteStreams.clear();
+    
+    // Clear screen share streams
+    this.screenShareStreams.forEach(stream => {
+      stream.stream.getTracks().forEach(track => track.stop());
+    });
+    this.screenShareStreams.clear();
+    this.screenShareProducerIds.clear();
 
     // Disconnect socket
     if (this.socket) {
@@ -691,6 +780,10 @@ export class MediaSoupClient {
 
   getRemoteStreams(): Map<string, RemoteStream> {
     return this.remoteStreams;
+  }
+  
+  getScreenShareStreams(): Map<string, ScreenShareStream> {
+    return this.screenShareStreams;
   }
 
   getSocketId(): string | undefined {

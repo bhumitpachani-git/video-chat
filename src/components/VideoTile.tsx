@@ -8,6 +8,7 @@ interface VideoTileProps {
   isLocal?: boolean;
   isMuted?: boolean;
   isVideoOff?: boolean;
+  compact?: boolean;
   className?: string;
 }
 
@@ -17,6 +18,7 @@ export function VideoTile({
   isLocal = false,
   isMuted = false,
   isVideoOff = false,
+  compact = false,
   className,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -81,7 +83,8 @@ export function VideoTile({
 
   return (
     <div className={cn(
-      'relative aspect-video rounded-2xl overflow-hidden',
+      'relative overflow-hidden',
+      compact ? 'aspect-video rounded-xl' : 'aspect-video rounded-2xl',
       'bg-gradient-to-br from-secondary via-secondary/80 to-muted',
       'border border-border/50 shadow-xl',
       'transition-all duration-300 group-hover:border-primary/30 group-hover:shadow-primary/10',
@@ -105,10 +108,16 @@ export function VideoTile({
       {!showVideo && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-secondary via-secondary/80 to-muted">
           <div 
-            className="w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center shadow-2xl"
+            className={cn(
+              "rounded-full flex items-center justify-center shadow-2xl",
+              compact ? "w-12 h-12" : "w-20 h-20 md:w-24 md:h-24"
+            )}
             style={{ background: getAvatarGradient() }}
           >
-            <span className="text-white text-2xl md:text-3xl font-bold uppercase">
+            <span className={cn(
+              "text-white font-bold uppercase",
+              compact ? "text-lg" : "text-2xl md:text-3xl"
+            )}>
               {username.charAt(0)}
             </span>
           </div>
