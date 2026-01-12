@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MicOff, VideoOff } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAudioProcessor } from '@/hooks/useAudioProcessor';
 
 interface VideoTileProps {
   stream: MediaStream | null;
@@ -8,6 +9,7 @@ interface VideoTileProps {
   isLocal?: boolean;
   isMuted?: boolean;
   isVideoOff?: boolean;
+  isSpeaking?: boolean;
   compact?: boolean;
   className?: string;
 }
@@ -18,11 +20,16 @@ export function VideoTile({
   isLocal = false,
   isMuted = false,
   isVideoOff = false,
+  isSpeaking: externalIsSpeaking,
   compact = false,
   className,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasVideo, setHasVideo] = useState(false);
+  
+  // Use audio processor for speaking detection
+  const { isSpeaking: detectedSpeaking, audioLevel } = useAudioProcessor(stream);
+  const isSpeaking = externalIsSpeaking ?? detectedSpeaking;
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -83,9 +90,11 @@ export function VideoTile({
 
   return (
     <div className={cn(
-      'relative w-full h-full rounded-xl overflow-hidden bg-muted',
+      'relative w-full h-full rounded-xl overflow-hidden bg-muted transition-all duration-200',
       compact ? 'min-h-[80px]' : 'min-h-[120px] sm:min-h-[180px]',
-      isLocal && 'ring-2 ring-primary/40',
+      // Speaking indicator ring
+      isSpeaking && !isMuted && 'ring-2 ring-green-500 ring-offset-2 ring-offset-background',
+      isLocal && !isSpeaking && 'ring-2 ring-primary/40',
       className
     )}>
       {/* Video element */}
@@ -106,8 +115,9 @@ export function VideoTile({
         <div className="absolute inset-0 flex items-center justify-center bg-muted">
           <div 
             className={cn(
-              "rounded-full flex items-center justify-center",
-              compact ? "w-10 h-10 sm:w-12 sm:h-12" : "w-16 h-16 sm:w-20 sm:h-20"
+              "rounded-full flex items-center justify-center transition-all duration-200",
+              compact ? "w-10 h-10 sm:w-12 sm:h-12" : "w-16 h-16 sm:w-20 sm:h-20",
+              isSpeaking && !isMuted && "ring-4 ring-green-500 ring-offset-2 ring-offset-muted"
             )}
             style={{ backgroundColor: getAvatarColor() }}
           >
@@ -121,35 +131,71 @@ export function VideoTile({
         </div>
       )}
 
-      {/* Bottom gradient */}
-      <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+      {/* Speaking audio wave animation */}
+      {isSpeaking && !isMuted && (
+        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2">
+          <div className={cn(
+            "flex items-center gap-0.5 px-1.5 py-1 rounded-full bg-green-500",
+            compact ? "scale-75" : ""
+          )}>
+            <Volume2 className="w-3 h-3 text-white animate-pulse" />
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="w-0.5 bg-white rounded-full animate-pulse"
+                  style={{
+                    height: `${Math.max(4, audioLevel * 100 * (i * 0.5))}px`,
+                    animationDelay: `${i * 100}ms`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Status indicators */}
+      {/* Bottom gradient */}
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none" />
+
+      {/* Top right status indicators */}
       <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 flex items-center gap-1">
-        {isMuted && (
-          <div className={cn(
-            "rounded-full bg-destructive flex items-center justify-center",
-            compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7"
-          )}>
-            <MicOff className={compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4"} />
-          </div>
-        )}
-        {isVideoOff && (
-          <div className={cn(
-            "rounded-full bg-destructive flex items-center justify-center",
-            compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7"
-          )}>
-            <VideoOff className={compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4"} />
-          </div>
-        )}
+        {/* Mic status */}
+        <div className={cn(
+          "rounded-full flex items-center justify-center transition-colors",
+          compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7",
+          isMuted ? "bg-destructive" : "bg-green-500/80"
+        )}>
+          {isMuted ? (
+            <MicOff className={cn("text-white", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
+          ) : (
+            <Mic className={cn("text-white", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
+          )}
+        </div>
+        
+        {/* Video status */}
+        <div className={cn(
+          "rounded-full flex items-center justify-center transition-colors",
+          compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7",
+          isVideoOff ? "bg-destructive" : "bg-green-500/80"
+        )}>
+          {isVideoOff ? (
+            <VideoOff className={cn("text-white", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
+          ) : (
+            <Video className={cn("text-white", compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4")} />
+          )}
+        </div>
       </div>
 
-      {/* Username */}
-      <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 right-1.5 sm:right-2">
+      {/* Username with speaking indicator */}
+      <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 right-1.5 sm:right-2 flex items-center gap-2">
         <span className={cn(
-          "inline-block px-2 py-0.5 rounded bg-black/50 text-white truncate max-w-full",
+          "inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/60 text-white truncate max-w-full",
           compact ? "text-xs" : "text-xs sm:text-sm"
         )}>
+          {isSpeaking && !isMuted && (
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+          )}
           {isLocal ? 'You' : username}
         </span>
       </div>

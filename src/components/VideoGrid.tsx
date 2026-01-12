@@ -1,8 +1,15 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { VideoTile } from './VideoTile';
 import { RemoteStream, ScreenShareStream } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
-import { Monitor, X } from 'lucide-react';
+import { Monitor, Users } from 'lucide-react';
+import { useRemoteAudioLevels } from '@/hooks/useAudioProcessor';
+
+interface ParticipantStatus {
+  socketId: string;
+  isMuted?: boolean;
+  isVideoOff?: boolean;
+}
 
 interface VideoGridProps {
   localStream: MediaStream | null;
@@ -13,6 +20,7 @@ interface VideoGridProps {
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
+  remoteParticipantStatus?: Map<string, ParticipantStatus>;
 }
 
 export function VideoGrid({
@@ -24,11 +32,24 @@ export function VideoGrid({
   isVideoEnabled,
   isAudioEnabled,
   isScreenSharing,
+  remoteParticipantStatus,
 }: VideoGridProps) {
   const remoteArray = Array.from(remoteStreams.values());
   const screenShareArray = Array.from(screenShareStreams.values());
   const hasActiveScreenShare = isScreenSharing || screenShareArray.length > 0;
   const totalParticipants = remoteArray.length + 1;
+
+  // Prepare streams for audio level detection
+  const streamsForAudioDetection = useMemo(() => {
+    const map = new Map<string, { stream: MediaStream; socketId: string }>();
+    remoteStreams.forEach((remote, socketId) => {
+      map.set(socketId, { stream: remote.stream, socketId });
+    });
+    return map;
+  }, [remoteStreams]);
+
+  // Get speaking states for all remote participants
+  const speakingStates = useRemoteAudioLevels(streamsForAudioDetection);
 
   // Screen share video ref
   const screenVideoRef = useRef<HTMLVideoElement>(null);
@@ -46,6 +67,17 @@ export function VideoGrid({
     if (totalParticipants <= 4) return 'grid-cols-2';
     if (totalParticipants <= 6) return 'grid-cols-2 sm:grid-cols-3';
     return 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
+  };
+
+  // Get participant status
+  const getParticipantStatus = (socketId: string) => {
+    const status = remoteParticipantStatus?.get(socketId);
+    const speaking = speakingStates.get(socketId);
+    return {
+      isMuted: status?.isMuted ?? false,
+      isVideoOff: status?.isVideoOff ?? false,
+      isSpeaking: speaking?.isSpeaking ?? false,
+    };
   };
 
   // Screen share layout
@@ -101,15 +133,21 @@ export function VideoGrid({
               compact
             />
           </div>
-          {remoteArray.map((remote) => (
-            <div key={remote.socketId} className="w-28 sm:w-40 shrink-0">
-              <VideoTile
-                stream={remote.stream}
-                username={remote.username}
-                compact
-              />
-            </div>
-          ))}
+          {remoteArray.map((remote) => {
+            const status = getParticipantStatus(remote.socketId);
+            return (
+              <div key={remote.socketId} className="w-28 sm:w-40 shrink-0">
+                <VideoTile
+                  stream={remote.stream}
+                  username={remote.username}
+                  isMuted={status.isMuted}
+                  isVideoOff={status.isVideoOff}
+                  isSpeaking={status.isSpeaking}
+                  compact
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -118,6 +156,12 @@ export function VideoGrid({
   // Normal grid layout
   return (
     <div className="h-full w-full p-2 sm:p-4 pb-24 sm:pb-28">
+      {/* Participant count indicator */}
+      <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-10 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-card/80 backdrop-blur border border-border text-xs sm:text-sm">
+        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
+        <span className="font-medium">{totalParticipants}</span>
+      </div>
+
       <div className={cn(
         'h-full grid gap-2 sm:gap-3',
         getGridClass(),
@@ -133,13 +177,19 @@ export function VideoGrid({
         />
 
         {/* Remote participants */}
-        {remoteArray.map((remote) => (
-          <VideoTile
-            key={remote.socketId}
-            stream={remote.stream}
-            username={remote.username}
-          />
-        ))}
+        {remoteArray.map((remote) => {
+          const status = getParticipantStatus(remote.socketId);
+          return (
+            <VideoTile
+              key={remote.socketId}
+              stream={remote.stream}
+              username={remote.username}
+              isMuted={status.isMuted}
+              isVideoOff={status.isVideoOff}
+              isSpeaking={status.isSpeaking}
+            />
+          );
+        })}
       </div>
 
       {/* Waiting state */}
