@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, 
   Monitor, MonitorOff, MessageCircle, Languages, Circle, Square,
-  MoreVertical
+  MoreHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -56,164 +55,142 @@ export function CallControls({
   const copyRoomId = async () => {
     await navigator.clipboard.writeText(roomId);
     setCopied(true);
-    toast.success('Room ID copied to clipboard!');
+    toast.success('Room ID copied!');
     setTimeout(() => setCopied(false), 2000);
   };
 
   const ControlButton = ({ 
     onClick, 
-    isActive, 
-    isDestructive = false,
-    isPrimary = false,
+    active, 
+    danger = false,
     children,
     badge,
     className,
+    label,
   }: { 
     onClick: () => void; 
-    isActive?: boolean;
-    isDestructive?: boolean;
-    isPrimary?: boolean;
+    active?: boolean;
+    danger?: boolean;
     children: React.ReactNode;
     badge?: boolean;
     className?: string;
+    label?: string;
   }) => (
     <button
       onClick={onClick}
+      aria-label={label}
       className={cn(
-        'relative w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all duration-200',
-        'hover:scale-105 active:scale-95',
-        isDestructive && 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/30',
-        isPrimary && 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/30',
-        !isDestructive && !isPrimary && isActive && 'bg-primary/20 text-primary border border-primary/30',
-        !isDestructive && !isPrimary && !isActive && 'bg-secondary/80 hover:bg-secondary text-foreground border border-border/50',
+        'relative w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-all',
+        'active:scale-95',
+        danger && 'bg-destructive text-white hover:bg-destructive/90',
+        !danger && active && 'bg-primary text-primary-foreground',
+        !danger && !active && 'bg-muted hover:bg-muted/80 text-foreground',
         className
       )}
     >
       {children}
       {badge && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center shadow-lg">
-          <span className="w-2 h-2 bg-primary-foreground rounded-full" />
-        </span>
+        <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-primary rounded-full border-2 border-background" />
       )}
     </button>
   );
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 p-4 md:p-6 flex justify-center items-center z-50 pointer-events-none">
-      <div className="pointer-events-auto backdrop-blur-2xl bg-card/80 rounded-3xl px-4 md:px-6 py-4 flex items-center gap-2 md:gap-3 shadow-2xl border border-border/50">
+    <div className="fixed bottom-0 inset-x-0 p-3 sm:p-4 flex justify-center z-40 pointer-events-none">
+      <div className="pointer-events-auto bg-card/95 backdrop-blur-lg rounded-full px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-1.5 sm:gap-2 shadow-xl border border-border">
         
-        {/* Room ID - Desktop only */}
-        <button
-          onClick={copyRoomId}
-          className="hidden xl:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-secondary/60 hover:bg-secondary transition-all border border-border/30"
+        {/* Audio toggle */}
+        <ControlButton 
+          onClick={onToggleAudio} 
+          danger={!isAudioEnabled}
+          label={isAudioEnabled ? 'Mute' : 'Unmute'}
         >
-          <span className="text-xs text-muted-foreground">Room:</span>
-          <span className="text-sm font-mono font-semibold text-foreground">{roomId}</span>
-          {copied ? (
-            <Check className="w-4 h-4 text-success" />
+          {isAudioEnabled ? (
+            <Mic className="w-5 h-5" />
           ) : (
-            <Copy className="w-4 h-4 text-muted-foreground" />
+            <MicOff className="w-5 h-5" />
           )}
-        </button>
+        </ControlButton>
 
-        <div className="hidden xl:block w-px h-10 bg-border/50" />
+        {/* Video toggle */}
+        <ControlButton 
+          onClick={onToggleVideo} 
+          danger={!isVideoEnabled}
+          label={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
+        >
+          {isVideoEnabled ? (
+            <Video className="w-5 h-5" />
+          ) : (
+            <VideoOff className="w-5 h-5" />
+          )}
+        </ControlButton>
 
-        {/* Primary controls */}
-        <div className="flex items-center gap-2 md:gap-3">
-          {/* Audio toggle */}
-          <ControlButton 
-            onClick={onToggleAudio} 
-            isDestructive={!isAudioEnabled}
-          >
-            {isAudioEnabled ? (
-              <Mic className="w-5 h-5 md:w-6 md:h-6" />
-            ) : (
-              <MicOff className="w-5 h-5 md:w-6 md:h-6" />
-            )}
-          </ControlButton>
-
-          {/* Video toggle */}
-          <ControlButton 
-            onClick={onToggleVideo} 
-            isDestructive={!isVideoEnabled}
-          >
-            {isVideoEnabled ? (
-              <Video className="w-5 h-5 md:w-6 md:h-6" />
-            ) : (
-              <VideoOff className="w-5 h-5 md:w-6 md:h-6" />
-            )}
-          </ControlButton>
-
-          {/* Screen share toggle */}
+        {/* Screen share - hidden on very small screens */}
+        <div className="hidden sm:block">
           <ControlButton 
             onClick={onToggleScreenShare} 
-            isPrimary={isScreenSharing}
+            active={isScreenSharing}
+            label={isScreenSharing ? 'Stop sharing' : 'Share screen'}
           >
             {isScreenSharing ? (
-              <MonitorOff className="w-5 h-5 md:w-6 md:h-6" />
+              <MonitorOff className="w-5 h-5" />
             ) : (
-              <Monitor className="w-5 h-5 md:w-6 md:h-6" />
+              <Monitor className="w-5 h-5" />
             )}
           </ControlButton>
         </div>
 
-        <div className="w-px h-10 bg-border/50" />
+        {/* Chat toggle */}
+        <ControlButton 
+          onClick={onToggleChat} 
+          active={isChatOpen}
+          badge={hasUnreadMessages}
+          label="Chat"
+        >
+          <MessageCircle className="w-5 h-5" />
+        </ControlButton>
 
-        {/* Secondary controls */}
-        <div className="flex items-center gap-2 md:gap-3">
-          {/* Chat toggle */}
-          <ControlButton 
-            onClick={onToggleChat} 
-            isActive={isChatOpen}
-            badge={hasUnreadMessages}
-          >
-            <MessageCircle className="w-5 h-5 md:w-6 md:h-6" />
-          </ControlButton>
+        {/* More options */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-muted hover:bg-muted/80 text-foreground transition-all active:scale-95">
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" side="top" className="mb-2 w-48">
+            <DropdownMenuItem onClick={copyRoomId}>
+              {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+              Copy Room ID
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onToggleTranscription} className="sm:hidden">
+              <Languages className="w-4 h-4 mr-2" />
+              {isTranscriptionOpen ? 'Close Transcription' : 'Transcription'}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onToggleScreenShare} className="sm:hidden">
+              <Monitor className="w-4 h-4 mr-2" />
+              {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onToggleRecording}>
+              {isRecording ? <Square className="w-4 h-4 mr-2" /> : <Circle className="w-4 h-4 mr-2" />}
+              {isRecording ? 'Stop Recording' : 'Start Recording'}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-          {/* Transcription toggle */}
+        {/* Transcription - hidden on mobile, in dropdown */}
+        <div className="hidden sm:block">
           <ControlButton 
             onClick={onToggleTranscription} 
-            isActive={isTranscriptionOpen || isTranscribing}
+            active={isTranscriptionOpen || isTranscribing}
+            label="Transcription"
           >
-            <Languages className="w-5 h-5 md:w-6 md:h-6" />
-          </ControlButton>
-
-          {/* Recording toggle */}
-          <ControlButton 
-            onClick={onToggleRecording} 
-            isDestructive={isRecording}
-            className={isRecording ? 'animate-pulse' : ''}
-          >
-            {isRecording ? (
-              <Square className="w-5 h-5 md:w-6 md:h-6" />
-            ) : (
-              <Circle className="w-5 h-5 md:w-6 md:h-6" />
-            )}
+            <Languages className="w-5 h-5" />
           </ControlButton>
         </div>
-
-        {/* Mobile more menu */}
-        <div className="xl:hidden">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center bg-secondary/80 hover:bg-secondary text-foreground border border-border/50 transition-all">
-                <MoreVertical className="w-5 h-5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={copyRoomId}>
-                <Copy className="w-4 h-4 mr-2" />
-                Copy Room ID
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div className="w-px h-10 bg-border/50" />
 
         {/* Leave call */}
-        <ControlButton onClick={onLeaveCall} isDestructive>
-          <PhoneOff className="w-5 h-5 md:w-6 md:h-6" />
+        <ControlButton onClick={onLeaveCall} danger label="Leave call">
+          <PhoneOff className="w-5 h-5" />
         </ControlButton>
       </div>
     </div>
