@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MicOff, VideoOff, User, Pin } from 'lucide-react';
+import { MicOff, VideoOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface VideoTileProps {
@@ -75,20 +75,17 @@ export function VideoTile({
   const showVideo = stream && hasVideo && !isVideoOff;
 
   // Generate avatar color from username
-  const getAvatarGradient = () => {
+  const getAvatarColor = () => {
     const hash = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const hue = hash % 360;
-    return `linear-gradient(135deg, hsl(${hue}, 70%, 50%), hsl(${(hue + 40) % 360}, 70%, 40%))`;
+    return `hsl(${hue}, 60%, 45%)`;
   };
 
   return (
     <div className={cn(
-      'relative overflow-hidden',
-      compact ? 'aspect-video rounded-xl' : 'aspect-video rounded-2xl',
-      'bg-gradient-to-br from-secondary via-secondary/80 to-muted',
-      'border border-border/50 shadow-xl',
-      'transition-all duration-300 group-hover:border-primary/30 group-hover:shadow-primary/10',
-      isLocal && 'ring-2 ring-primary/20',
+      'relative w-full h-full rounded-xl overflow-hidden bg-muted',
+      compact ? 'min-h-[80px]' : 'min-h-[120px] sm:min-h-[180px]',
+      isLocal && 'ring-2 ring-primary/40',
       className
     )}>
       {/* Video element */}
@@ -98,7 +95,7 @@ export function VideoTile({
         playsInline
         muted={isLocal}
         className={cn(
-          'absolute inset-0 w-full h-full object-cover transition-opacity duration-300',
+          'absolute inset-0 w-full h-full object-cover',
           showVideo ? 'opacity-100' : 'opacity-0',
           isLocal && 'transform scale-x-[-1]'
         )}
@@ -106,17 +103,17 @@ export function VideoTile({
 
       {/* Avatar placeholder when no video */}
       {!showVideo && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-secondary via-secondary/80 to-muted">
+        <div className="absolute inset-0 flex items-center justify-center bg-muted">
           <div 
             className={cn(
-              "rounded-full flex items-center justify-center shadow-2xl",
-              compact ? "w-12 h-12" : "w-20 h-20 md:w-24 md:h-24"
+              "rounded-full flex items-center justify-center",
+              compact ? "w-10 h-10 sm:w-12 sm:h-12" : "w-16 h-16 sm:w-20 sm:h-20"
             )}
-            style={{ background: getAvatarGradient() }}
+            style={{ backgroundColor: getAvatarColor() }}
           >
             <span className={cn(
-              "text-white font-bold uppercase",
-              compact ? "text-lg" : "text-2xl md:text-3xl"
+              "text-white font-semibold uppercase",
+              compact ? "text-base sm:text-lg" : "text-xl sm:text-2xl"
             )}>
               {username.charAt(0)}
             </span>
@@ -124,43 +121,37 @@ export function VideoTile({
         </div>
       )}
 
-      {/* Top gradient overlay */}
-      <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
-      
-      {/* Bottom gradient overlay */}
-      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/60 via-black/30 to-transparent pointer-events-none" />
+      {/* Bottom gradient */}
+      <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
 
-      {/* Local indicator */}
-      {isLocal && (
-        <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/90 backdrop-blur-sm">
-          <Pin className="w-3 h-3 text-primary-foreground" />
-          <span className="text-xs font-medium text-primary-foreground">You</span>
-        </div>
-      )}
-
-      {/* Status indicators - top right */}
-      <div className="absolute top-3 right-3 flex items-center gap-2">
+      {/* Status indicators */}
+      <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 flex items-center gap-1">
         {isMuted && (
-          <div className="w-8 h-8 rounded-full bg-destructive/90 backdrop-blur-sm flex items-center justify-center shadow-lg">
-            <MicOff className="w-4 h-4 text-destructive-foreground" />
+          <div className={cn(
+            "rounded-full bg-destructive flex items-center justify-center",
+            compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7"
+          )}>
+            <MicOff className={compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4"} />
           </div>
         )}
         {isVideoOff && (
-          <div className="w-8 h-8 rounded-full bg-destructive/90 backdrop-blur-sm flex items-center justify-center shadow-lg">
-            <VideoOff className="w-4 h-4 text-destructive-foreground" />
+          <div className={cn(
+            "rounded-full bg-destructive flex items-center justify-center",
+            compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7"
+          )}>
+            <VideoOff className={compact ? "w-3 h-3" : "w-3.5 h-3.5 sm:w-4 sm:h-4"} />
           </div>
         )}
       </div>
 
-      {/* Username - bottom left */}
-      <div className="absolute bottom-3 left-3 right-3">
-        <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-md">
-            <span className="text-sm font-medium text-white truncate">
-              {isLocal ? `${username} (You)` : username}
-            </span>
-          </div>
-        </div>
+      {/* Username */}
+      <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 right-1.5 sm:right-2">
+        <span className={cn(
+          "inline-block px-2 py-0.5 rounded bg-black/50 text-white truncate max-w-full",
+          compact ? "text-xs" : "text-xs sm:text-sm"
+        )}>
+          {isLocal ? 'You' : username}
+        </span>
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { VideoTile } from './VideoTile';
 import { RemoteStream, ScreenShareStream } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
-import { Monitor } from 'lucide-react';
+import { Monitor, X } from 'lucide-react';
 
 interface VideoGridProps {
   localStream: MediaStream | null;
@@ -30,111 +30,68 @@ export function VideoGrid({
   const hasActiveScreenShare = isScreenSharing || screenShareArray.length > 0;
   const totalParticipants = remoteArray.length + 1;
 
-  // Smart grid layout based on participant count
-  const getGridConfig = () => {
-    if (totalParticipants === 1) {
-      return {
-        gridClass: 'grid-cols-1',
-        containerClass: 'max-w-3xl mx-auto',
-        gap: 'gap-4'
-      };
+  // Screen share video ref
+  const screenVideoRef = useRef<HTMLVideoElement>(null);
+  
+  useEffect(() => {
+    if (screenVideoRef.current && localScreenStream) {
+      screenVideoRef.current.srcObject = localScreenStream;
     }
-    if (totalParticipants === 2) {
-      return {
-        gridClass: 'grid-cols-1 md:grid-cols-2',
-        containerClass: 'max-w-5xl mx-auto',
-        gap: 'gap-4 md:gap-6'
-      };
-    }
-    if (totalParticipants === 3) {
-      return {
-        gridClass: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-        containerClass: 'max-w-6xl mx-auto',
-        gap: 'gap-3 md:gap-4'
-      };
-    }
-    if (totalParticipants === 4) {
-      return {
-        gridClass: 'grid-cols-2',
-        containerClass: 'max-w-5xl mx-auto',
-        gap: 'gap-3 md:gap-4'
-      };
-    }
-    if (totalParticipants <= 6) {
-      return {
-        gridClass: 'grid-cols-2 lg:grid-cols-3',
-        containerClass: 'max-w-6xl mx-auto',
-        gap: 'gap-3'
-      };
-    }
-    if (totalParticipants <= 9) {
-      return {
-        gridClass: 'grid-cols-2 md:grid-cols-3',
-        containerClass: '',
-        gap: 'gap-2 md:gap-3'
-      };
-    }
-    return {
-      gridClass: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
-      containerClass: '',
-      gap: 'gap-2'
-    };
+  }, [localScreenStream]);
+
+  // Determine grid layout based on participant count
+  const getGridClass = () => {
+    if (totalParticipants === 1) return 'grid-cols-1';
+    if (totalParticipants === 2) return 'grid-cols-1 sm:grid-cols-2';
+    if (totalParticipants <= 4) return 'grid-cols-2';
+    if (totalParticipants <= 6) return 'grid-cols-2 sm:grid-cols-3';
+    return 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
   };
 
-  const config = getGridConfig();
-
-  // When screen share is active, show a different layout
+  // Screen share layout
   if (hasActiveScreenShare) {
     return (
-      <div className="relative w-full h-full p-3 md:p-6 pb-28 md:pb-32 overflow-auto flex flex-col lg:flex-row gap-4">
-        {/* Main screen share area */}
-        <div className="flex-1 min-h-0">
-          {/* Local screen share */}
-          {isScreenSharing && localScreenStream && (
-            <div className="relative w-full h-full min-h-[300px] lg:min-h-[400px] rounded-2xl overflow-hidden bg-secondary/50 border-2 border-primary/50">
+      <div className="h-full w-full flex flex-col p-2 sm:p-4 pb-24 sm:pb-28 gap-2 sm:gap-4">
+        {/* Screen share - main area */}
+        <div className="flex-1 min-h-0 relative rounded-xl overflow-hidden bg-black">
+          {isScreenSharing && localScreenStream ? (
+            <>
               <video
+                ref={screenVideoRef}
                 autoPlay
                 playsInline
                 muted
-                ref={(el) => {
-                  if (el && localScreenStream) {
-                    el.srcObject = localScreenStream;
-                  }
-                }}
-                className="w-full h-full object-contain bg-black"
+                className="w-full h-full object-contain"
               />
-              <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/90 text-primary-foreground text-sm font-medium">
-                <Monitor className="w-4 h-4" />
-                <span>You are sharing your screen</span>
+              <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-2 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs sm:text-sm font-medium">
+                <Monitor className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">You are sharing</span>
+                <span className="sm:hidden">Sharing</span>
               </div>
-            </div>
-          )}
-          
-          {/* Remote screen shares */}
-          {screenShareArray.map((screenShare) => (
-            <div key={screenShare.socketId} className="relative w-full h-full min-h-[300px] lg:min-h-[400px] rounded-2xl overflow-hidden bg-secondary/50 border-2 border-accent/50">
+            </>
+          ) : screenShareArray[0] ? (
+            <>
               <video
                 autoPlay
                 playsInline
                 ref={(el) => {
-                  if (el && screenShare.stream) {
-                    el.srcObject = screenShare.stream;
+                  if (el && screenShareArray[0]?.stream) {
+                    el.srcObject = screenShareArray[0].stream;
                   }
                 }}
-                className="w-full h-full object-contain bg-black"
+                className="w-full h-full object-contain"
               />
-              <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/90 text-accent-foreground text-sm font-medium">
-                <Monitor className="w-4 h-4" />
-                <span>{screenShare.username}'s screen</span>
+              <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-2 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-muted text-foreground text-xs sm:text-sm font-medium">
+                <Monitor className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span>{screenShareArray[0].username}</span>
               </div>
-            </div>
-          ))}
+            </>
+          ) : null}
         </div>
 
-        {/* Sidebar with participants */}
-        <div className="lg:w-64 xl:w-80 flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto pb-2 lg:pb-0 shrink-0">
-          {/* Local video thumbnail */}
-          <div className="w-40 lg:w-full shrink-0">
+        {/* Participants strip - horizontal scroll on mobile */}
+        <div className="h-20 sm:h-28 shrink-0 flex gap-2 overflow-x-auto">
+          <div className="w-28 sm:w-40 shrink-0">
             <VideoTile
               stream={localStream}
               username={username}
@@ -144,10 +101,8 @@ export function VideoGrid({
               compact
             />
           </div>
-
-          {/* Remote participants thumbnails */}
           {remoteArray.map((remote) => (
-            <div key={remote.socketId} className="w-40 lg:w-full shrink-0">
+            <div key={remote.socketId} className="w-28 sm:w-40 shrink-0">
               <VideoTile
                 stream={remote.stream}
                 username={remote.username}
@@ -160,46 +115,43 @@ export function VideoGrid({
     );
   }
 
+  // Normal grid layout
   return (
-    <div className="relative w-full h-full p-3 md:p-6 pb-28 md:pb-32 overflow-auto">
+    <div className="h-full w-full p-2 sm:p-4 pb-24 sm:pb-28">
       <div className={cn(
-        'grid auto-rows-fr',
-        config.gridClass,
-        config.containerClass,
-        config.gap
+        'h-full grid gap-2 sm:gap-3',
+        getGridClass(),
+        totalParticipants === 1 && 'max-w-2xl mx-auto'
       )}>
-        {/* Local video - always first with special styling */}
-        <div className="relative group">
-          <VideoTile
-            stream={localStream}
-            username={username}
-            isLocal
-            isMuted={!isAudioEnabled}
-            isVideoOff={!isVideoEnabled}
-          />
-        </div>
+        {/* Local video */}
+        <VideoTile
+          stream={localStream}
+          username={username}
+          isLocal
+          isMuted={!isAudioEnabled}
+          isVideoOff={!isVideoEnabled}
+        />
 
         {/* Remote participants */}
         {remoteArray.map((remote) => (
-          <div key={remote.socketId} className="relative group">
-            <VideoTile
-              stream={remote.stream}
-              username={remote.username}
-            />
-          </div>
+          <VideoTile
+            key={remote.socketId}
+            stream={remote.stream}
+            username={remote.username}
+          />
         ))}
       </div>
 
-      {/* Empty state when waiting for others */}
+      {/* Waiting state */}
       {remoteStreams.size === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-24">
-          <div className="backdrop-blur-xl bg-card/60 px-8 py-5 rounded-2xl border border-border/50 shadow-2xl">
+          <div className="bg-card/80 backdrop-blur px-6 py-4 rounded-2xl border border-border shadow-lg">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-3 h-3 bg-primary rounded-full animate-ping absolute" />
-                <div className="w-3 h-3 bg-primary rounded-full" />
+                <div className="w-2.5 h-2.5 bg-primary rounded-full animate-ping absolute" />
+                <div className="w-2.5 h-2.5 bg-primary rounded-full" />
               </div>
-              <p className="text-muted-foreground text-base md:text-lg font-medium">
+              <p className="text-muted-foreground text-sm sm:text-base">
                 Waiting for others to join...
               </p>
             </div>
