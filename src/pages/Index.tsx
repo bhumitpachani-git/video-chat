@@ -1,4 +1,3 @@
-import React from 'react';
 import { useVideoCall } from '@/hooks/useVideoCall';
 import { JoinRoomForm } from '@/components/JoinRoomForm';
 import { VideoCall } from '@/components/VideoCall';
@@ -22,6 +21,9 @@ const Index = () => {
     username,
     socketId,
     chatMessages,
+    polls,
+    whiteboardStrokes,
+    sharedNotes,
     joinRoom,
     leaveRoom,
     toggleVideo,
@@ -31,6 +33,12 @@ const Index = () => {
     toggleTranscription,
     setSelectedLanguage,
     sendChatMessage,
+    createPoll,
+    submitVote,
+    closePoll,
+    sendWhiteboardStroke,
+    clearWhiteboard,
+    updateNotes,
   } = useVideoCall();
 
   const isConnecting = connectionState === 'connecting';
@@ -54,6 +62,9 @@ const Index = () => {
         transcripts={transcripts}
         isTranscribing={isTranscribing}
         selectedLanguage={selectedLanguage}
+        polls={polls}
+        whiteboardStrokes={whiteboardStrokes}
+        sharedNotes={sharedNotes}
         onToggleVideo={toggleVideo}
         onToggleAudio={toggleAudio}
         onToggleScreenShare={toggleScreenShare}
@@ -62,6 +73,12 @@ const Index = () => {
         onLanguageChange={setSelectedLanguage}
         onSendMessage={sendChatMessage}
         onLeaveCall={leaveRoom}
+        onCreatePoll={createPoll}
+        onVote={submitVote}
+        onClosePoll={closePoll}
+        onWhiteboardStroke={sendWhiteboardStroke}
+        onWhiteboardClear={clearWhiteboard}
+        onUpdateNotes={updateNotes}
       />
     );
   }

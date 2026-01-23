@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, 
   Monitor, MonitorOff, MessageCircle, Languages, Circle, Square,
-  MoreHorizontal, Share2, Volume2, Users, Maximize, Settings
+  MoreHorizontal, Share2, Volume2, Users, Maximize, Settings,
+  BarChart2, Pen, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -39,6 +40,9 @@ interface CallControlsProps {
   onToggleRecording: () => void;
   onToggleParticipants: () => void;
   onToggleSettings: () => void;
+  onTogglePolls: () => void;
+  onToggleWhiteboard: () => void;
+  onToggleNotes: () => void;
   onLeaveCall: () => void;
 }
 
@@ -61,6 +65,9 @@ export function CallControls({
   onToggleRecording,
   onToggleParticipants,
   onToggleSettings,
+  onTogglePolls,
+  onToggleWhiteboard,
+  onToggleNotes,
   onLeaveCall,
 }: CallControlsProps) {
   const [copied, setCopied] = useState(false);
@@ -309,6 +316,23 @@ export function CallControls({
             <DropdownMenuItem onClick={toggleFullscreen}>
               <Maximize className="w-4 h-4 mr-2" />
               {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onClick={onTogglePolls}>
+              <BarChart2 className="w-4 h-4 mr-2" />
+              Polls
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={onToggleWhiteboard}>
+              <Pen className="w-4 h-4 mr-2" />
+              Whiteboard
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={onToggleNotes}>
+              <FileText className="w-4 h-4 mr-2" />
+              Shared Notes
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

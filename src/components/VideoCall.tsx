@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { VideoGrid } from './VideoGrid';
 import { CallControls } from './CallControls';
 import { ChatPanel } from './ChatPanel';
 import { TranscriptionPanel, TranscriptEntry } from './TranscriptionPanel';
 import { ParticipantsList } from './ParticipantsList';
 import { SettingsPanel } from './SettingsPanel';
-import { RemoteStream, ChatMessage, ScreenShareStream } from '@/lib/mediasoup';
+import { PollsPanel } from './PollsPanel';
+import { WhiteboardPanel } from './WhiteboardPanel';
+import { NotesPanel } from './NotesPanel';
+import { RemoteStream, ChatMessage, ScreenShareStream, Poll, WhiteboardStroke } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
 
 interface VideoCallProps {
@@ -24,6 +27,9 @@ interface VideoCallProps {
   transcripts: TranscriptEntry[];
   isTranscribing: boolean;
   selectedLanguage: string;
+  polls: Poll[];
+  whiteboardStrokes: WhiteboardStroke[];
+  sharedNotes: string;
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   onToggleScreenShare: () => void;
@@ -32,9 +38,15 @@ interface VideoCallProps {
   onLanguageChange: (language: string) => void;
   onSendMessage: (message: string) => void;
   onLeaveCall: () => void;
+  onCreatePoll: (question: string, options: string[], isAnonymous: boolean, allowMultiple: boolean) => void;
+  onVote: (pollId: string, selectedOptions: number[]) => void;
+  onClosePoll: (pollId: string) => void;
+  onWhiteboardStroke: (stroke: WhiteboardStroke) => void;
+  onWhiteboardClear: () => void;
+  onUpdateNotes: (notes: string) => void;
 }
 
-type PanelType = 'chat' | 'transcription' | 'participants' | 'settings' | null;
+type PanelType = 'chat' | 'transcription' | 'participants' | 'settings' | 'polls' | 'whiteboard' | 'notes' | null;
 
 export function VideoCall({
   localStream,
@@ -52,6 +64,9 @@ export function VideoCall({
   transcripts,
   isTranscribing,
   selectedLanguage,
+  polls,
+  whiteboardStrokes,
+  sharedNotes,
   onToggleVideo,
   onToggleAudio,
   onToggleScreenShare,
@@ -60,6 +75,12 @@ export function VideoCall({
   onLanguageChange,
   onSendMessage,
   onLeaveCall,
+  onCreatePoll,
+  onVote,
+  onClosePoll,
+  onWhiteboardStroke,
+  onWhiteboardClear,
+  onUpdateNotes,
 }: VideoCallProps) {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
@@ -153,6 +174,31 @@ export function VideoCall({
         {activePanel === 'settings' && (
           <SettingsPanel onClose={closePanel} />
         )}
+        {activePanel === 'polls' && (
+          <PollsPanel
+            polls={polls}
+            onCreatePoll={onCreatePoll}
+            onVote={onVote}
+            onClosePoll={onClosePoll}
+            onClose={closePanel}
+            currentSocketId={socketId}
+          />
+        )}
+        {activePanel === 'whiteboard' && (
+          <WhiteboardPanel
+            strokes={whiteboardStrokes}
+            onStroke={onWhiteboardStroke}
+            onClear={onWhiteboardClear}
+            onClose={closePanel}
+          />
+        )}
+        {activePanel === 'notes' && (
+          <NotesPanel
+            notes={sharedNotes}
+            onUpdateNotes={onUpdateNotes}
+            onClose={closePanel}
+          />
+        )}
       </div>
 
       {/* Controls - fixed at bottom */}
@@ -175,6 +221,9 @@ export function VideoCall({
         onToggleRecording={onToggleRecording}
         onToggleParticipants={() => togglePanel('participants')}
         onToggleSettings={() => togglePanel('settings')}
+        onTogglePolls={() => togglePanel('polls')}
+        onToggleWhiteboard={() => togglePanel('whiteboard')}
+        onToggleNotes={() => togglePanel('notes')}
         onLeaveCall={onLeaveCall}
       />
     </div>

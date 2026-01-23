@@ -42,6 +42,32 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface Poll {
+  id: string;
+  question: string;
+  options: string[];
+  creatorUsername: string;
+  isAnonymous: boolean;
+  allowMultiple: boolean;
+  createdAt: string;
+  results?: number[];
+  totalVotes?: number;
+  active: boolean;
+}
+
+export interface WhiteboardStroke {
+  id: string;
+  points: { x: number; y: number }[];
+  color: string;
+  width: number;
+  tool: 'pen' | 'eraser';
+}
+
+export interface WhiteboardState {
+  strokes: WhiteboardStroke[];
+  background: string;
+}
+
 export interface ProducerInfoWithType extends ProducerInfo {
   isScreenShare?: boolean;
 }
@@ -88,6 +114,23 @@ export class MediaSoupClient {
   }) => void) | null = null;
   public onRecordingStarted: ((data: { recordingId: string; startedBy: string; startedAt: string }) => void) | null = null;
   public onRecordingStopped: ((data: { recordingId: string; downloadPath: string }) => void) | null = null;
+  
+  // Polls callbacks
+  public onNewPoll: ((poll: Poll) => void) | null = null;
+  public onPollUpdated: ((data: { pollId: string; results: number[]; totalVotes: number }) => void) | null = null;
+  public onPollClosed: ((data: { pollId: string; finalResults: number[]; totalVotes: number }) => void) | null = null;
+  
+  // Whiteboard callbacks
+  public onWhiteboardStroke: ((stroke: WhiteboardStroke) => void) | null = null;
+  public onWhiteboardClear: (() => void) | null = null;
+  public onWhiteboardSync: ((state: WhiteboardState) => void) | null = null;
+  
+  // Notes callbacks
+  public onNotesUpdated: ((notes: string) => void) | null = null;
+  
+  // Initial room state
+  private initialWhiteboard: WhiteboardState | null = null;
+  private initialNotes: string = '';
 
   async connect(): Promise<Socket> {
     return new Promise((resolve, reject) => {
@@ -192,6 +235,44 @@ export class MediaSoupClient {
         this.onRecordingStopped?.(data);
       });
 
+      // Poll events
+      this.socket.on('new-poll', (poll: Poll) => {
+        console.log('[MediaSoup] 📊 New poll:', poll);
+        this.onNewPoll?.({ ...poll, active: true });
+      });
+
+      this.socket.on('poll-updated', (data: { pollId: string; results: number[]; totalVotes: number }) => {
+        console.log('[MediaSoup] 📊 Poll updated:', data);
+        this.onPollUpdated?.(data);
+      });
+
+      this.socket.on('poll-closed', (data: { pollId: string; finalResults: number[]; totalVotes: number }) => {
+        console.log('[MediaSoup] 📊 Poll closed:', data);
+        this.onPollClosed?.(data);
+      });
+
+      // Whiteboard events
+      this.socket.on('whiteboard-stroke', (stroke: WhiteboardStroke) => {
+        console.log('[MediaSoup] 🎨 Whiteboard stroke received');
+        this.onWhiteboardStroke?.(stroke);
+      });
+
+      this.socket.on('whiteboard-clear', () => {
+        console.log('[MediaSoup] 🎨 Whiteboard cleared');
+        this.onWhiteboardClear?.();
+      });
+
+      this.socket.on('whiteboard-sync', (state: WhiteboardState) => {
+        console.log('[MediaSoup] 🎨 Whiteboard synced');
+        this.onWhiteboardSync?.(state);
+      });
+
+      // Notes events
+      this.socket.on('notes-updated', ({ notes }: { notes: string }) => {
+        console.log('[MediaSoup] 📝 Notes updated');
+        this.onNotesUpdated?.(notes);
+      });
+
       setTimeout(() => {
         if (!this.socket?.connected) {
           reject(new Error('Connection timeout'));
@@ -229,6 +310,17 @@ export class MediaSoupClient {
           this.device = new Device();
           await this.device.load({ routerRtpCapabilities: response.rtpCapabilities });
           console.log('[MediaSoup] ✅ Device loaded with RTP capabilities');
+          
+          // Store and emit initial room state
+          if (response.whiteboard) {
+            this.initialWhiteboard = response.whiteboard;
+            this.onWhiteboardSync?.(response.whiteboard);
+          }
+          if (response.notes) {
+            this.initialNotes = response.notes;
+            this.onNotesUpdated?.(response.notes);
+          }
+          
           resolve(response.peers);
         } catch (error) {
           console.error('[MediaSoup] Error loading device:', error);
@@ -868,6 +960,82 @@ export class MediaSoupClient {
       console.log('[MediaSoup] Stopping recording...');
       this.socket.emit('stop-recording', { roomId: this.roomId });
     }
+  }
+
+  // Poll methods
+  createPoll(question: string, options: string[], isAnonymous: boolean = false, allowMultiple: boolean = false): void {
+    if (this.socket) {
+      console.log('[MediaSoup] Creating poll...');
+      this.socket.emit('create-poll', {
+        roomId: this.roomId,
+        question,
+        options,
+        isAnonymous,
+        allowMultiple
+      });
+    }
+  }
+
+  submitVote(pollId: string, selectedOptions: number[]): void {
+    if (this.socket) {
+      console.log('[MediaSoup] Submitting vote...');
+      this.socket.emit('submit-vote', {
+        roomId: this.roomId,
+        pollId,
+        selectedOptions
+      });
+    }
+  }
+
+  closePoll(pollId: string): void {
+    if (this.socket) {
+      console.log('[MediaSoup] Closing poll...');
+      this.socket.emit('close-poll', {
+        roomId: this.roomId,
+        pollId
+      });
+    }
+  }
+
+  // Whiteboard methods
+  sendWhiteboardStroke(stroke: WhiteboardStroke): void {
+    if (this.socket) {
+      this.socket.emit('whiteboard-stroke', {
+        roomId: this.roomId,
+        stroke
+      });
+    }
+  }
+
+  clearWhiteboard(): void {
+    if (this.socket) {
+      console.log('[MediaSoup] Clearing whiteboard...');
+      this.socket.emit('whiteboard-clear', { roomId: this.roomId });
+    }
+  }
+
+  requestWhiteboardSync(): void {
+    if (this.socket) {
+      this.socket.emit('whiteboard-sync-request', { roomId: this.roomId });
+    }
+  }
+
+  // Notes methods
+  updateNotes(notes: string): void {
+    if (this.socket) {
+      this.socket.emit('update-notes', {
+        roomId: this.roomId,
+        notes
+      });
+    }
+  }
+
+  getInitialWhiteboard(): WhiteboardState | null {
+    return this.initialWhiteboard;
+  }
+
+  getInitialNotes(): string {
+    return this.initialNotes;
   }
 }
 

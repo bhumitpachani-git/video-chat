@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { MediaSoupClient, RemoteStream, Peer, ChatMessage, ScreenShareStream } from '@/lib/mediasoup';
+import { MediaSoupClient, RemoteStream, Peer, ChatMessage, ScreenShareStream, Poll, WhiteboardStroke, WhiteboardState } from '@/lib/mediasoup';
 import { TranscriptEntry } from '@/components/TranscriptionPanel';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'in-call' | 'error';
@@ -22,6 +22,9 @@ export interface UseVideoCallReturn {
   username: string;
   socketId: string | undefined;
   chatMessages: ChatMessage[];
+  polls: Poll[];
+  whiteboardStrokes: WhiteboardStroke[];
+  sharedNotes: string;
   joinRoom: (roomId: string, username: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
   toggleVideo: () => void;
@@ -31,6 +34,12 @@ export interface UseVideoCallReturn {
   toggleTranscription: () => void;
   setSelectedLanguage: (language: string) => void;
   sendChatMessage: (message: string) => Promise<void>;
+  createPoll: (question: string, options: string[], isAnonymous: boolean, allowMultiple: boolean) => void;
+  submitVote: (pollId: string, selectedOptions: number[]) => void;
+  closePoll: (pollId: string) => void;
+  sendWhiteboardStroke: (stroke: WhiteboardStroke) => void;
+  clearWhiteboard: () => void;
+  updateNotes: (notes: string) => void;
 }
 
 export function useVideoCall(): UseVideoCallReturn {
@@ -50,6 +59,9 @@ export function useVideoCall(): UseVideoCallReturn {
   const [roomId, setRoomId] = useState('');
   const [username, setUsername] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [polls, setPolls] = useState<Poll[]>([]);
+  const [whiteboardStrokes, setWhiteboardStrokes] = useState<WhiteboardStroke[]>([]);
+  const [sharedNotes, setSharedNotes] = useState('');
   
   const clientRef = useRef<MediaSoupClient | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -171,6 +183,52 @@ export function useVideoCall(): UseVideoCallReturn {
         setIsRecording(false);
       };
 
+      // Handle poll events
+      client.onNewPoll = (poll) => {
+        console.log('[Hook] New poll:', poll);
+        setPolls(prev => [...prev, poll]);
+      };
+
+      client.onPollUpdated = (data) => {
+        console.log('[Hook] Poll updated:', data);
+        setPolls(prev => prev.map(p => 
+          p.id === data.pollId 
+            ? { ...p, results: data.results, totalVotes: data.totalVotes }
+            : p
+        ));
+      };
+
+      client.onPollClosed = (data) => {
+        console.log('[Hook] Poll closed:', data);
+        setPolls(prev => prev.map(p => 
+          p.id === data.pollId 
+            ? { ...p, results: data.finalResults, totalVotes: data.totalVotes, active: false }
+            : p
+        ));
+      };
+
+      // Handle whiteboard events
+      client.onWhiteboardStroke = (stroke) => {
+        console.log('[Hook] Whiteboard stroke received');
+        setWhiteboardStrokes(prev => [...prev, stroke]);
+      };
+
+      client.onWhiteboardClear = () => {
+        console.log('[Hook] Whiteboard cleared');
+        setWhiteboardStrokes([]);
+      };
+
+      client.onWhiteboardSync = (state) => {
+        console.log('[Hook] Whiteboard synced');
+        setWhiteboardStrokes(state.strokes);
+      };
+
+      // Handle notes events
+      client.onNotesUpdated = (notes) => {
+        console.log('[Hook] Notes updated');
+        setSharedNotes(notes);
+      };
+
       // Connect to server
       await client.connect();
       setConnectionState('connected');
@@ -221,6 +279,9 @@ export function useVideoCall(): UseVideoCallReturn {
     setIsTranscribing(false);
     setTranscripts([]);
     setChatMessages([]);
+    setPolls([]);
+    setWhiteboardStrokes([]);
+    setSharedNotes('');
     
     // Stop transcription audio processing
     if (processorRef.current) {
@@ -344,6 +405,48 @@ export function useVideoCall(): UseVideoCallReturn {
     }
   };
 
+  // Poll handlers
+  const createPoll = useCallback((question: string, options: string[], isAnonymous: boolean, allowMultiple: boolean) => {
+    if (clientRef.current) {
+      clientRef.current.createPoll(question, options, isAnonymous, allowMultiple);
+    }
+  }, []);
+
+  const submitVote = useCallback((pollId: string, selectedOptions: number[]) => {
+    if (clientRef.current) {
+      clientRef.current.submitVote(pollId, selectedOptions);
+    }
+  }, []);
+
+  const closePoll = useCallback((pollId: string) => {
+    if (clientRef.current) {
+      clientRef.current.closePoll(pollId);
+    }
+  }, []);
+
+  // Whiteboard handlers
+  const sendWhiteboardStroke = useCallback((stroke: WhiteboardStroke) => {
+    if (clientRef.current) {
+      setWhiteboardStrokes(prev => [...prev, stroke]);
+      clientRef.current.sendWhiteboardStroke(stroke);
+    }
+  }, []);
+
+  const clearWhiteboard = useCallback(() => {
+    if (clientRef.current) {
+      setWhiteboardStrokes([]);
+      clientRef.current.clearWhiteboard();
+    }
+  }, []);
+
+  // Notes handler
+  const updateNotes = useCallback((notes: string) => {
+    if (clientRef.current) {
+      setSharedNotes(notes);
+      clientRef.current.updateNotes(notes);
+    }
+  }, []);
+
   return {
     connectionState,
     localStream,
@@ -362,6 +465,9 @@ export function useVideoCall(): UseVideoCallReturn {
     username,
     socketId: clientRef.current?.getSocketId(),
     chatMessages,
+    polls,
+    whiteboardStrokes,
+    sharedNotes,
     joinRoom,
     leaveRoom,
     toggleVideo,
@@ -371,5 +477,11 @@ export function useVideoCall(): UseVideoCallReturn {
     toggleTranscription,
     setSelectedLanguage: handleLanguageChange,
     sendChatMessage,
+    createPoll,
+    submitVote,
+    closePoll,
+    sendWhiteboardStroke,
+    clearWhiteboard,
+    updateNotes,
   };
 }
