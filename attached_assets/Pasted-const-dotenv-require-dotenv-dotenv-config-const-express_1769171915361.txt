@@ -1,0 +1,935 @@
+const dotenv = require('dotenv');
+dotenv.config();
+const express = require('express');
+const http = require('http');
+const socketIO = require('socket.io');
+const mediasoup = require('mediasoup');
+const cors = require('cors');
+const { TranscribeStreamingClient, StartStreamTranscriptionCommand } = require('@aws-sdk/client-transcribe-streaming');
+const { TranslateClient, TranslateTextCommand } = require('@aws-sdk/client-translate');
+const { PassThrough } = require('stream');
+const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
+
+const transcribeClient = new TranscribeStreamingClient({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+
+const translateClient = new TranslateClient({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const server = http.createServer(app);
+const io = socketIO(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+const PORT = 3000;
+
+let worker;
+const rooms = new Map();
+const transcriptionSessions = new Map();
+const recordingSessions = new Map();
+const activeRecordings = new Map();
+
+
+const LANGUAGE_CODE_MAP = {
+  'auto': 'auto',
+  'en': 'en-US',
+  'es': 'es-US',
+  'fr': 'fr-FR',
+  'de': 'de-DE',
+  'it': 'it-IT',
+  'pt': 'pt-BR',
+  'zh': 'zh-CN',
+  'ja': 'ja-JP',
+  'ko': 'ko-KR',
+  'ar': 'ar-SA',
+  'hi': 'hi-IN',
+  'ru': 'ru-RU',
+};
+
+
+const AWS_TO_SHORT_CODE = {
+  'en-US': 'en',
+  'es-US': 'es',
+  'fr-FR': 'fr',
+  'de-DE': 'de',
+  'it-IT': 'it',
+  'pt-BR': 'pt',
+  'zh-CN': 'zh',
+  'ja-JP': 'ja',
+  'ko-KR': 'ko',
+  'ar-SA': 'ar',
+  'hi-IN': 'hi',
+  'ru-RU': 'ru',
+};
+
+const mediaCodecs = [
+  {
+    kind: 'audio',
+    mimeType: 'audio/opus',
+    clockRate: 48000,
+    channels: 2,
+    parameters: {
+      'sprop-stereo': 1,
+      'usedtx': 1,
+      'maxaveragebitrate': 128000
+    }
+  },
+  {
+    kind: 'video',
+    mimeType: 'video/VP8',
+    clockRate: 90000,
+    parameters: {
+      'x-google-start-bitrate': 800
+    }
+  },
+  {
+    kind: 'video',
+    mimeType: 'video/H264',
+    clockRate: 90000,
+    parameters: {
+      'packetization-mode': 1,
+      'profile-level-id': '42e01f',
+      'level-asymmetry-allowed': 1,
+      'x-google-start-bitrate': 800
+    }
+  }
+];
+
+const webRtcTransportOptions = {
+  listenIps: [
+    {
+      ip: "0.0.0.0",
+      announcedIp: "192.168.1.4"
+    }
+  ],
+  enableUdp: true,
+  enableTcp: true,
+  preferUdp: true,
+};
+
+
+async function createWorker() {
+  worker = await mediasoup.createWorker({
+    logLevel: 'warn',
+    rtcMinPort: 10000,
+    rtcMaxPort: 10100,
+  });
+
+  console.log(`MediaSoup worker pid: ${worker.pid}`);
+
+  worker.on('died', () => {
+    console.error('MediaSoup worker died, exiting...');
+    setTimeout(() => process.exit(1), 2000);
+  });
+
+  return worker;
+}
+
+async function getOrCreateRoom(roomId) {
+  if (!rooms.has(roomId)) {
+    const router = await worker.createRouter({ mediaCodecs });
+    rooms.set(roomId, {
+      router,
+      peers: new Map(),
+      polls: new Map(),
+      whiteboard: { strokes: [], background: '#ffffff' },
+      notes: ''
+    });
+    console.log(`Room created: ${roomId}`);
+  }
+  return rooms.get(roomId);
+}
+
+io.on('connection', (socket) => {
+  console.log(`Client connected: ${socket.id}`);
+  let currentRoomId = null;
+  let currentUsername = null;
+
+  socket.on('join-room', async ({ roomId, username }, callback) => {
+    try {
+      currentRoomId = roomId;
+      currentUsername = username;
+
+      const room = await getOrCreateRoom(roomId);
+
+      room.peers.set(socket.id, {
+        username,
+        transports: new Map(),
+        producers: new Map(),
+        consumers: new Map()
+      });
+
+      socket.join(roomId);
+
+      const rtpCapabilities = room.router.rtpCapabilities;
+
+      socket.to(roomId).emit('user-joined', {
+        socketId: socket.id,
+        username
+      });
+
+      const existingPeers = [];
+      room.peers.forEach((peer, peerId) => {
+        if (peerId !== socket.id) {
+          existingPeers.push({
+            socketId: peerId,
+            username: peer.username
+          });
+        }
+      });
+
+      callback({
+        rtpCapabilities,
+        peers: existingPeers,
+        whiteboard: room.whiteboard,
+        notes: room.notes
+      });
+
+      console.log(`User ${username} joined room ${roomId}`);
+    } catch (error) {
+      console.error('Error joining room:', error);
+      callback({ error: error.message });
+    }
+  });
+
+  socket.on('start-recording', async ({ roomId, username }) => {
+    console.log(`[Recording] Starting for room ${roomId} by ${username}`);
+
+    const room = rooms.get(roomId);
+    if (!room) {
+      socket.emit('recording-error', { error: 'Room not found' });
+      return;
+    }
+
+    const recordingsDir = path.join(__dirname, 'recordings', roomId);
+    if (!fs.existsSync(recordingsDir)) {
+      fs.mkdirSync(recordingsDir, { recursive: true });
+    }
+
+    const timestamp = Date.now();
+    activeRecordings.set(roomId, {
+      startedAt: timestamp,
+      startedBy: username,
+      outputDir: recordingsDir,
+      participants: new Map(),
+    });
+
+    for (const [peerId, peer] of room.peers.entries()) {
+      await startRecordingForPeer(roomId, peerId, peer, recordingsDir, timestamp);
+    }
+
+    io.to(roomId).emit('recording-started', {
+      recordingId: `${roomId}-${timestamp}`,
+      startedBy: username,
+      startedAt: new Date().toISOString(),
+    });
+  });
+
+  socket.on('stop-recording', async ({ roomId }) => {
+    console.log(`[Recording] Stopping for room ${roomId}`);
+
+    const recording = activeRecordings.get(roomId);
+    if (!recording) {
+      socket.emit('recording-error', { error: 'No active recording' });
+      return;
+    }
+
+    const files = [];
+    for (const [peerId, participant] of recording.participants.entries()) {
+      participant.process.stdin.end();
+      participant.process.kill('SIGINT');
+      files.push({
+        username: participant.username,
+        file: participant.outputFile,
+      });
+    }
+
+    activeRecordings.delete(roomId);
+
+    io.to(roomId).emit('recording-stopped', {
+      recordingId: `${roomId}-${recording.startedAt}`,
+      downloadPath: `/api/recordings/${roomId}`,
+      files: files.map(f => ({
+        username: f.username,
+        downloadPath: `/api/recordings/${roomId}/${path.basename(f.file)}`,
+      })),
+    });
+  });
+
+  socket.on('start-transcription', async ({ roomId, username, targetLanguage = 'en', speakingLanguage = 'auto' }) => {
+    console.log(`[Transcription] Starting for ${username} in room ${roomId}, speaking: ${speakingLanguage}, target: ${targetLanguage}`);
+
+    if (!rooms.has(roomId)) {
+      socket.emit('transcription-error', { error: 'Room not found' });
+      return;
+    }
+
+    const audioStream = new PassThrough();
+
+    transcriptionSessions.set(socket.id, {
+      socketId: socket.id,
+      roomId,
+      username,
+      targetLanguage,
+      speakingLanguage,
+      audioStream,
+      isActive: true,
+    });
+
+    try {
+      const transcribeParams = {
+        MediaEncoding: 'pcm',
+        MediaSampleRateHertz: 16000,
+        AudioStream: (async function* () {
+          for await (const chunk of audioStream) {
+            if (transcriptionSessions.get(socket.id)?.isActive) {
+              yield { AudioEvent: { AudioChunk: chunk } };
+            }
+          }
+        })(),
+      };
+
+      if (speakingLanguage === 'auto') {
+        transcribeParams.IdentifyLanguage = true;
+        transcribeParams.LanguageOptions = 'en-US,es-US,fr-FR,de-DE,it-IT,pt-BR,zh-CN,ja-JP,ko-KR,ar-SA,hi-IN,ru-RU';
+      } else {
+        const awsLanguageCode = LANGUAGE_CODE_MAP[speakingLanguage] || 'en-US';
+        transcribeParams.LanguageCode = awsLanguageCode;
+        console.log(`[Transcription] Using specific language code: ${awsLanguageCode} for ${username}`);
+      }
+
+      const command = new StartStreamTranscriptionCommand(transcribeParams);
+      const response = await transcribeClient.send(command);
+
+      for await (const event of response.TranscriptResultStream) {
+        const session = transcriptionSessions.get(socket.id);
+        if (!session || !session.isActive) break;
+
+        if (!event.TranscriptEvent) continue;
+
+        const results = event.TranscriptEvent.Transcript.Results || [];
+
+        for (const result of results) {
+          if (!result.Alternatives?.length) continue;
+
+          const transcript = result.Alternatives[0].Transcript;
+          const isFinal = !result.IsPartial;
+
+          const detectedLanguageCode = result.LanguageCode || 'en-US';
+          const detectedLanguage = AWS_TO_SHORT_CODE[detectedLanguageCode] || 'en';
+
+          if (!transcript || transcript.trim() === '') continue;
+
+          console.log(`[Transcription] ${username} (${detectedLanguage}): "${transcript}"`);
+
+          const room = rooms.get(roomId);
+          if (!room) continue;
+
+          // Use speaking language preference if set, otherwise use detected language
+          const speakerSession = transcriptionSessions.get(socket.id);
+          const actualLanguage = speakerSession?.speakingLanguage && speakerSession.speakingLanguage !== 'auto' 
+            ? speakerSession.speakingLanguage 
+            : detectedLanguage;
+
+          console.log(`[Transcription] ${username} speaking ${actualLanguage}: "${transcript}"`);
+
+          // Send to each peer with their own translation
+          for (const [peerId, peer] of room.peers.entries()) {
+            const peerSession = transcriptionSessions.get(peerId);
+            const peerTargetLang = peerSession?.targetLanguage || 'en';
+
+            let translatedText = transcript;
+            let shouldTranslate = false;
+
+            // Only translate if:
+            // 1. Peer wants a specific language (not 'auto')
+            // 2. Speaker's actual language is different from peer's target language
+            // 3. Peer is not the speaker themselves
+            if (peerId !== socket.id && peerTargetLang !== 'auto' && peerTargetLang !== actualLanguage) {
+              shouldTranslate = true;
+              try {
+                translatedText = await translateText(
+                  transcript,
+                  actualLanguage,
+                  peerTargetLang
+                );
+                console.log(`[Translation] ${actualLanguage} → ${peerTargetLang} for ${peer.username}: "${translatedText}"`);
+              } catch (error) {
+                console.error('[Translation] Error:', error);
+                translatedText = transcript;
+                shouldTranslate = false;
+              }
+            }
+
+            const transcriptionPayload = {
+              id: `${socket.id}-${Date.now()}-${Math.random()}`,
+              socketId: socket.id,
+              username,
+              originalText: transcript,
+              translatedText: shouldTranslate && translatedText !== transcript ? translatedText : undefined,
+              originalLanguage: actualLanguage,
+              targetLanguage: peerTargetLang,
+              isFinal,
+              timestamp: new Date().toISOString(),
+            };
+
+            const recordingSession = recordingSessions.get(roomId);
+            if (recordingSession && isFinal && peerId === socket.id) {
+              // Only save original transcripts to recording
+              recordingSession.transcripts.push({
+                ...transcriptionPayload,
+                translatedText: undefined,
+              });
+              recordingSession.participants.add(username);
+            }
+
+            io.to(peerId).emit('transcription', transcriptionPayload);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Transcription] Error:', error);
+
+      socket.emit('transcription-error', {
+        error: error.message || 'Transcription failed',
+      });
+    } finally {
+      const session = transcriptionSessions.get(socket.id);
+      if (session) {
+        session.isActive = false;
+      }
+    }
+  });
+
+  socket.on('audio-chunk', ({ roomId, username, audioData }) => {
+    const session = transcriptionSessions.get(socket.id);
+    if (session && session.audioStream && session.isActive) {
+      try {
+        const buffer = Buffer.from(new Int16Array(audioData).buffer);
+        session.audioStream.write(buffer);
+      } catch (error) {
+        console.error('[Audio Chunk] Error writing to stream:', error);
+      }
+    }
+  });
+
+  socket.on('stop-transcription', ({ roomId }) => {
+    const session = transcriptionSessions.get(socket.id);
+    if (session) {
+      session.isActive = false;
+      if (session.audioStream) {
+        session.audioStream.end();
+      }
+      transcriptionSessions.delete(socket.id);
+      console.log(`[Transcription] Stopped for socket ${socket.id}`);
+    }
+  });
+
+  socket.on('set-target-language', ({ roomId, targetLanguage }) => {
+    const session = transcriptionSessions.get(socket.id);
+    if (session) {
+      session.targetLanguage = targetLanguage;
+      console.log(`[Transcription] Target language set to ${targetLanguage} for socket ${socket.id}`);
+    }
+  });
+
+  socket.on('create-transport', async ({ roomId, direction }, callback) => {
+    try {
+      const room = rooms.get(roomId);
+      if (!room) throw new Error('Room not found');
+
+      const transport = await room.router.createWebRtcTransport(webRtcTransportOptions);
+
+      const peer = room.peers.get(socket.id);
+      peer.transports.set(transport.id, transport);
+
+      callback({
+        id: transport.id,
+        iceParameters: transport.iceParameters,
+        iceCandidates: transport.iceCandidates,
+        dtlsParameters: transport.dtlsParameters
+      });
+
+      console.log(`Transport created: ${transport.id} for ${direction}`);
+    } catch (error) {
+      console.error('Error creating transport:', error);
+      callback({ error: error.message });
+    }
+  });
+
+  socket.on('connect-transport', async ({ roomId, transportId, dtlsParameters }, callback) => {
+    try {
+      const room = rooms.get(roomId);
+      const peer = room.peers.get(socket.id);
+      const transport = peer.transports.get(transportId);
+
+      await transport.connect({ dtlsParameters });
+      callback({ success: true });
+
+      console.log(`Transport connected: ${transportId}`);
+    } catch (error) {
+      console.error('Error connecting transport:', error);
+      callback({ error: error.message });
+    }
+  });
+
+  socket.on('produce', async ({ roomId, transportId, kind, rtpParameters }, callback) => {
+    try {
+      const room = rooms.get(roomId);
+      const peer = room.peers.get(socket.id);
+      const transport = peer.transports.get(transportId);
+
+      const producer = await transport.produce({ kind, rtpParameters });
+      peer.producers.set(producer.id, producer);
+
+      socket.to(roomId).emit('new-producer', {
+        socketId: socket.id,
+        producerId: producer.id,
+        kind
+      });
+
+      callback({ id: producer.id });
+      console.log(`Producer created: ${producer.id} (${kind})`);
+    } catch (error) {
+      console.error('Error producing:', error);
+      callback({ error: error.message });
+    }
+  });
+
+  socket.on('consume', async ({ roomId, transportId, producerId, rtpCapabilities }, callback) => {
+    try {
+      const room = rooms.get(roomId);
+      const peer = room.peers.get(socket.id);
+      const transport = peer.transports.get(transportId);
+
+      let producer = null;
+      for (const [, p] of room.peers.entries()) {
+        if (p.producers.has(producerId)) {
+          producer = p.producers.get(producerId);
+          break;
+        }
+      }
+
+      if (!producer) throw new Error('Producer not found');
+
+      if (!room.router.canConsume({ producerId, rtpCapabilities })) {
+        throw new Error('Cannot consume');
+      }
+
+      const consumer = await transport.consume({
+        producerId,
+        rtpCapabilities,
+        paused: true
+      });
+
+      peer.consumers.set(consumer.id, consumer);
+
+      callback({
+        id: consumer.id,
+        producerId,
+        kind: consumer.kind,
+        rtpParameters: consumer.rtpParameters
+      });
+
+      console.log(`Consumer created: ${consumer.id}`);
+    } catch (error) {
+      console.error('Error consuming:', error);
+      callback({ error: error.message });
+    }
+  });
+
+  socket.on('resume-consumer', async ({ roomId, consumerId }, callback) => {
+    try {
+      const room = rooms.get(roomId);
+      const peer = room.peers.get(socket.id);
+      const consumer = peer.consumers.get(consumerId);
+
+      await consumer.resume();
+      callback({ success: true });
+
+      console.log(`Consumer resumed: ${consumerId}`);
+    } catch (error) {
+      console.error('Error resuming consumer:', error);
+      callback({ error: error.message });
+    }
+  });
+
+  socket.on('chat-message', ({ roomId, ...message }) => {
+    socket.to(roomId).emit('chat-message', message);
+  });
+
+  socket.on('mark-screen-share', ({ roomId, producerId }) => {
+    socket.to(roomId).emit('new-producer', {
+      socketId: socket.id,
+      producerId,
+      kind: 'video',
+      isScreenShare: true
+    });
+  });
+
+  socket.on('screen-share-stopped', ({ roomId, producerId }) => {
+    socket.to(roomId).emit('screen-share-stopped', {
+      socketId: socket.id,
+      producerId
+    });
+  });
+
+  socket.on('get-producers', async ({ roomId }, callback) => {
+    try {
+      const room = rooms.get(roomId);
+      const producers = [];
+
+      room.peers.forEach((peer, peerId) => {
+        if (peerId !== socket.id) {
+          peer.producers.forEach((producer) => {
+            producers.push({
+              socketId: peerId,
+              producerId: producer.id,
+              kind: producer.kind
+            });
+          });
+        }
+      });
+
+      callback({ producers });
+    } catch (error) {
+      console.error('Error getting producers:', error);
+      callback({ error: error.message });
+    }
+  });
+
+  socket.on('create-poll', ({ roomId, question, options, isAnonymous = false, allowMultiple = false }) => {
+    const room = rooms.get(roomId);
+    if (!room) return socket.emit('poll-error', { error: 'Room not found' });
+
+    const pollId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const poll = {
+      id: pollId,
+      question,
+      options: options.map(opt => ({ text: opt, votes: 0 })),
+      creator: socket.id,
+      creatorUsername: currentUsername,
+      isAnonymous,
+      allowMultiple,
+      createdAt: new Date().toISOString(),
+      votes: new Map(),           // voterSocketId → [option indices]
+      active: true
+    };
+
+    // Store poll in room
+    if (!room.polls) room.polls = new Map();
+    room.polls.set(pollId, poll);
+
+    // Broadcast new poll to room
+    io.to(roomId).emit('new-poll', {
+      id: pollId,
+      question,
+      options: poll.options.map(o => o.text),
+      creatorUsername: currentUsername,
+      isAnonymous,
+      allowMultiple,
+      createdAt: poll.createdAt
+    });
+
+    console.log(`Poll created in ${roomId}: ${question}`);
+  });
+
+  socket.on('submit-vote', ({ roomId, pollId, selectedOptions }) => {
+    const room = rooms.get(roomId);
+    if (!room || !room.polls?.has(pollId)) {
+      return socket.emit('poll-error', { error: 'Poll not found' });
+    }
+
+    const poll = room.polls.get(pollId);
+    if (!poll.active) {
+      return socket.emit('poll-error', { error: 'Poll is closed' });
+    }
+
+    // Validate input
+    if (!Array.isArray(selectedOptions) || selectedOptions.length === 0) {
+      return socket.emit('poll-error', { error: 'Invalid vote' });
+    }
+
+    if (!poll.allowMultiple && selectedOptions.length > 1) {
+      return socket.emit('poll-error', { error: 'Multiple votes not allowed' });
+    }
+
+    // Remove previous vote if any (for changing vote)
+    if (poll.votes.has(socket.id)) {
+      const prev = poll.votes.get(socket.id);
+      prev.forEach(idx => poll.options[idx].votes--);
+    }
+
+    // Apply new vote
+    selectedOptions.forEach(idx => {
+      if (idx >= 0 && idx < poll.options.length) {
+        poll.options[idx].votes++;
+      }
+    });
+
+    poll.votes.set(socket.id, selectedOptions);
+
+    // Broadcast updated results
+    io.to(roomId).emit('poll-updated', {
+      pollId,
+      results: poll.options.map(o => o.votes),
+      totalVotes: Array.from(poll.votes.values()).reduce((sum, arr) => sum + arr.length, 0)
+    });
+
+    // Optional: send private confirmation
+    socket.emit('vote-received', { pollId });
+  });
+
+  socket.on('close-poll', ({ roomId, pollId }) => {
+    const room = rooms.get(roomId);
+    if (!room || !room.polls?.has(pollId)) return;
+
+    const poll = room.polls.get(pollId);
+    if (poll.creator !== socket.id) {
+      return socket.emit('poll-error', { error: 'Only creator can close poll' });
+    }
+
+    poll.active = false;
+
+    io.to(roomId).emit('poll-closed', {
+      pollId,
+      finalResults: poll.options.map(o => o.votes),
+      totalVotes: Array.from(poll.votes.values()).reduce((sum, arr) => sum + arr.length, 0)
+    });
+
+    console.log(`Poll closed in ${roomId}: ${poll.question}`);
+  });
+
+  socket.on('whiteboard-clear', ({ roomId }) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    room.whiteboard.strokes = [];
+    io.to(roomId).emit('whiteboard-cleared');
+  });
+
+  socket.on('whiteboard-draw', ({ roomId, stroke }) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    // stroke = { color, width, points: [{x,y}, ...], tool: 'pen'|'eraser'|... }
+    room.whiteboard.strokes.push(stroke);
+
+    // Broadcast to others (not sender)
+    socket.to(roomId).emit('whiteboard-draw', stroke);
+  });
+
+  socket.on('whiteboard-undo', ({ roomId }) => {
+    const room = rooms.get(roomId);
+    if (!room || room.whiteboard.strokes.length === 0) return;
+    room.whiteboard.strokes.pop();
+    io.to(roomId).emit('whiteboard-undo');
+  });
+
+  socket.on('notes-update', ({ roomId, content }) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.notes = content;
+    socket.to(roomId).emit('notes-updated', { content });
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`Client disconnected: ${socket.id}`);
+
+    const session = transcriptionSessions.get(socket.id);
+    if (session) {
+      session.isActive = false;
+      if (session.audioStream) {
+        session.audioStream.end();
+      }
+      transcriptionSessions.delete(socket.id);
+    }
+
+    if (currentRoomId && rooms.has(currentRoomId)) {
+      const room = rooms.get(currentRoomId);
+      const peer = room.peers.get(socket.id);
+
+      if (peer) {
+        peer.transports.forEach((transport) => transport.close());
+
+        room.peers.delete(socket.id);
+
+        socket.to(currentRoomId).emit('user-left', {
+          socketId: socket.id,
+          username: currentUsername
+        });
+
+        if (room.peers.size === 0) {
+          room.router.close();
+          rooms.delete(currentRoomId);
+          console.log(`Room deleted: ${currentRoomId}`);
+        }
+      }
+    }
+  });
+});
+
+async function translateText(text, sourceLanguage, targetLanguage) {
+  if (sourceLanguage === targetLanguage || !text || text.trim() === '') {
+    return text;
+  }
+
+  try {
+    const command = new TranslateTextCommand({
+      Text: text,
+      SourceLanguageCode: sourceLanguage,
+      TargetLanguageCode: targetLanguage,
+    });
+
+    const response = await translateClient.send(command);
+    return response.TranslatedText || text;
+  } catch (error) {
+    console.error('[Translation] Error:', {
+      source: sourceLanguage,
+      target: targetLanguage,
+      error: error.message
+    });
+    return text;
+  }
+}
+
+async function startRecordingForPeer(roomId, peerId, peer, outputDir, timestamp) {
+  const recording = activeRecordings.get(roomId);
+  if (!recording) return;
+
+  const audioProducer = Array.from(peer.producers.values()).find(p => p.kind === 'audio');
+  const videoProducer = Array.from(peer.producers.values()).find(p => p.kind === 'video');
+
+  if (!audioProducer && !videoProducer) return;
+
+  const outputFile = path.join(outputDir, `${peer.username}-${timestamp}.webm`);
+
+  const ffmpegArgs = [
+    '-y',
+    '-protocol_whitelist', 'pipe,rtp,udp',
+    '-i', 'pipe:0',
+    '-c:v', 'libvpx',
+    '-c:a', 'libopus',
+    '-f', 'webm',
+    outputFile
+  ];
+
+  const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+
+  ffmpeg.stderr.on('data', (data) => {
+    console.log(`[FFmpeg ${peer.username}]: ${data}`);
+  });
+
+  ffmpeg.on('close', (code) => {
+    console.log(`[Recording] FFmpeg closed for ${peer.username} with code ${code}`);
+  });
+
+  recording.participants.set(peerId, {
+    process: ffmpeg,
+    outputFile,
+    username: peer.username,
+  });
+}
+
+app.get('/api/rooms/:roomId', (req, res) => {
+  const roomId = req.params.roomId;
+  const room = rooms.get(roomId);
+
+  if (room) {
+    const users = [];
+    room.peers.forEach((peer, socketId) => {
+      users.push({ socketId, username: peer.username });
+    });
+    res.json({ exists: true, userCount: room.peers.size, users });
+  } else {
+    res.json({ exists: false, userCount: 0, users: [] });
+  }
+});
+
+app.get('/api/recordings/:roomId/:filename', (req, res) => {
+  const { roomId, filename } = req.params;
+  const filePath = path.join(__dirname, 'recordings', roomId, filename);
+
+  if (fs.existsSync(filePath)) {
+    res.download(filePath);
+  } else {
+    res.status(404).json({ error: 'Recording not found' });
+  }
+});
+
+app.get('/api/recordings/:recordingId', (req, res) => {
+  const recordingId = req.params.recordingId;
+  const recordingsDir = path.join(__dirname, 'recordings');
+  const recordingPath = path.join(recordingsDir, `${recordingId}.json`);
+
+  if (fs.existsSync(recordingPath)) {
+    const data = JSON.parse(fs.readFileSync(recordingPath, 'utf8'));
+    res.json(data);
+  } else {
+    res.status(404).json({ error: 'Recording not found' });
+  }
+});
+
+app.get('/api/rooms/:roomId/recordings', (req, res) => {
+  const roomId = req.params.roomId;
+  const recordingsDir = path.join(__dirname, 'recordings');
+
+  if (!fs.existsSync(recordingsDir)) {
+    return res.json({ recordings: [] });
+  }
+
+  const files = fs.readdirSync(recordingsDir);
+  const recordings = files
+    .filter(f => f.startsWith(roomId) && f.endsWith('.json'))
+    .map(f => {
+      const data = JSON.parse(fs.readFileSync(path.join(recordingsDir, f), 'utf8'));
+      return {
+        recordingId: data.recordingId,
+        startedAt: data.startedAt,
+        endedAt: data.endedAt,
+        participants: data.participants,
+        transcriptCount: data.transcripts.length,
+      };
+    });
+
+  res.json({ recordings });
+});
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    activeRooms: rooms.size,
+    activeSessions: transcriptionSessions.size
+  });
+});
+
+async function startServer() {
+  await createWorker();
+
+  server.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Health check available at http://localhost:${PORT}/health`);
+  });
+}
+
+startServer();
