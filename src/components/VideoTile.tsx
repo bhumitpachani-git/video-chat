@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, MicOff, Video, VideoOff, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParticipantMediaStatus } from '@/hooks/useAdvancedAudioProcessor';
@@ -26,17 +26,179 @@ export function VideoTile({
   className,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
   const [hasVideo, setHasVideo] = useState(false);
   const { settings: videoSettings } = useVideoSettings();
+  const [backgroundImageLoaded, setBackgroundImageLoaded] = useState<HTMLImageElement | null>(null);
   
-  // Use actual media status detection
   const actualStatus = useParticipantMediaStatus(stream, isLocal);
   
-  // Use detected status if props are not explicitly provided
   const isMuted = propMuted ?? actualStatus.isMuted;
   const isVideoOff = propVideoOff ?? actualStatus.isVideoOff;
   const isSpeaking = externalIsSpeaking ?? actualStatus.isSpeaking;
   const audioLevel = actualStatus.audioLevel;
+
+  // Load background image when set
+  useEffect(() => {
+    if (videoSettings.backgroundImage) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => setBackgroundImageLoaded(img);
+      img.onerror = () => setBackgroundImageLoaded(null);
+      img.src = videoSettings.backgroundImage;
+    } else {
+      setBackgroundImageLoaded(null);
+    }
+  }, [videoSettings.backgroundImage]);
+
+  // Canvas rendering for blur/background effects
+  const renderFrame = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2) {
+      animationRef.current = requestAnimationFrame(renderFrame);
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      animationRef.current = requestAnimationFrame(renderFrame);
+      return;
+    }
+
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Apply mirror transform if needed
+    if (videoSettings.mirrorVideo) {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.translate(-width, 0);
+    }
+
+    // Draw background first
+    if (videoSettings.backgroundImage && backgroundImageLoaded) {
+      // Draw the background image
+      const imgRatio = backgroundImageLoaded.width / backgroundImageLoaded.height;
+      const canvasRatio = width / height;
+      let drawWidth, drawHeight, drawX, drawY;
+      
+      if (imgRatio > canvasRatio) {
+        drawHeight = height;
+        drawWidth = height * imgRatio;
+        drawX = (width - drawWidth) / 2;
+        drawY = 0;
+      } else {
+        drawWidth = width;
+        drawHeight = width / imgRatio;
+        drawX = 0;
+        drawY = (height - drawHeight) / 2;
+      }
+      
+      ctx.drawImage(backgroundImageLoaded, drawX, drawY, drawWidth, drawHeight);
+      
+      // Draw video with center mask effect (simulate person cutout)
+      ctx.save();
+      
+      // Create an elliptical gradient mask for the "person" area
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const radiusX = width * 0.35;
+      const radiusY = height * 0.45;
+      
+      // Create radial gradient for soft edge
+      const gradient = ctx.createRadialGradient(
+        centerX, centerY, Math.min(radiusX, radiusY) * 0.5,
+        centerX, centerY, Math.max(radiusX, radiusY)
+      );
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');
+      gradient.addColorStop(0.7, 'rgba(255,255,255,0.9)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      
+      // Draw video with gradient composite
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(video, 0, 0, width, height);
+      
+      ctx.restore();
+    } else if (videoSettings.backgroundBlur) {
+      // For blur effect: draw blurred video first, then sharp center
+      // First pass: draw blurred background (simulated with scaled blur)
+      ctx.filter = 'blur(20px)';
+      ctx.drawImage(video, -20, -20, width + 40, height + 40);
+      ctx.filter = 'none';
+      
+      // Second pass: draw sharp center area
+      ctx.save();
+      
+      // Create elliptical clipping path for center focus
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const radiusX = width * 0.38;
+      const radiusY = height * 0.48;
+      
+      ctx.beginPath();
+      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+      ctx.clip();
+      
+      // Draw sharp video in the center
+      ctx.drawImage(video, 0, 0, width, height);
+      
+      ctx.restore();
+      
+      // Add soft edge transition
+      const gradient = ctx.createRadialGradient(
+        centerX, centerY, radiusX * 0.8,
+        centerX, centerY, radiusX * 1.1
+      );
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.1)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+    } else {
+      // No effects - just draw video
+      ctx.drawImage(video, 0, 0, width, height);
+    }
+
+    if (videoSettings.mirrorVideo) {
+      ctx.restore();
+    }
+
+    animationRef.current = requestAnimationFrame(renderFrame);
+  }, [videoSettings.mirrorVideo, videoSettings.backgroundBlur, videoSettings.backgroundImage, backgroundImageLoaded]);
+
+  // Start/stop canvas rendering based on settings
+  useEffect(() => {
+    const needsCanvasRendering = isLocal && (videoSettings.backgroundBlur || videoSettings.backgroundImage);
+    
+    if (needsCanvasRendering && stream && hasVideo) {
+      animationRef.current = requestAnimationFrame(renderFrame);
+    }
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isLocal, videoSettings.backgroundBlur, videoSettings.backgroundImage, stream, hasVideo, renderFrame]);
+
+  // Update canvas size when container resizes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const resizeObserver = new ResizeObserver(() => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    });
+    
+    resizeObserver.observe(canvas);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -74,7 +236,6 @@ export function VideoTile({
     stream.addEventListener('addtrack', checkVideoTracks);
     stream.addEventListener('removetrack', checkVideoTracks);
 
-    // Also listen for track enable/disable
     stream.getVideoTracks().forEach(track => {
       track.addEventListener('mute', checkVideoTracks);
       track.addEventListener('unmute', checkVideoTracks);
@@ -101,8 +262,8 @@ export function VideoTile({
   }, [isVideoOff, stream]);
 
   const showVideo = stream && hasVideo && !isVideoOff;
+  const useCanvasRendering = isLocal && (videoSettings.backgroundBlur || videoSettings.backgroundImage);
 
-  // Generate avatar color from username
   const getAvatarColor = () => {
     const hash = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const hue = hash % 360;
@@ -113,52 +274,31 @@ export function VideoTile({
     <div className={cn(
       'relative w-full h-full rounded-xl overflow-hidden bg-muted transition-all duration-200',
       compact ? 'min-h-[80px]' : 'min-h-[120px] sm:min-h-[180px]',
-      // Speaking indicator ring
       isSpeaking && !isMuted && 'ring-2 ring-success ring-offset-2 ring-offset-background',
       isLocal && !isSpeaking && 'ring-2 ring-primary/40',
       className
     )}>
-      {/* Background image for local video - shown behind blurred video */}
-      {isLocal && videoSettings.backgroundImage && showVideo && (
-        <div 
-          className="absolute inset-0 bg-cover bg-center z-0"
-          style={{ backgroundImage: `url(${videoSettings.backgroundImage})` }}
-        />
-      )}
-      
-      {/* Blur background layer - creates frosted glass effect */}
-      {isLocal && videoSettings.backgroundBlur && showVideo && (
-        <div className="absolute inset-0 z-0">
-          <video
-            autoPlay
-            playsInline
-            muted
-            ref={(el) => {
-              if (el && stream) {
-                el.srcObject = stream;
-              }
-            }}
-            className={cn(
-              'w-full h-full object-cover blur-xl scale-110',
-              videoSettings.mirrorVideo && 'transform scale-x-[-1] scale-y-100'
-            )}
-            style={{ filter: 'blur(24px) brightness(0.7)' }}
-          />
-        </div>
-      )}
-      
-      {/* Video element */}
+      {/* Hidden video element for canvas source */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted={isLocal}
         className={cn(
-          'absolute inset-0 w-full h-full object-cover z-10',
-          showVideo ? 'opacity-100' : 'opacity-0',
-          isLocal && videoSettings.mirrorVideo && 'transform scale-x-[-1]'
+          'absolute inset-0 w-full h-full object-cover',
+          showVideo && !useCanvasRendering ? 'opacity-100' : 'opacity-0',
+          !useCanvasRendering && isLocal && videoSettings.mirrorVideo && 'transform scale-x-[-1]'
         )}
+        style={{ display: useCanvasRendering ? 'none' : 'block' }}
       />
+      
+      {/* Canvas for effects rendering */}
+      {useCanvasRendering && showVideo && (
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
 
       {/* Avatar placeholder when no video */}
       {!showVideo && (
@@ -183,7 +323,7 @@ export function VideoTile({
 
       {/* Speaking audio wave animation */}
       {isSpeaking && !isMuted && (
-        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2">
+        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 z-20">
           <div className={cn(
             "flex items-center gap-0.5 px-1.5 py-1 rounded-full bg-success",
             compact ? "scale-75" : ""
@@ -206,11 +346,10 @@ export function VideoTile({
       )}
 
       {/* Bottom gradient */}
-      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none" />
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none z-10" />
 
       {/* Top right status indicators */}
-      <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 flex items-center gap-1">
-        {/* Mic status */}
+      <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 flex items-center gap-1 z-20">
         <div className={cn(
           "rounded-full flex items-center justify-center transition-colors",
           compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7",
@@ -223,7 +362,6 @@ export function VideoTile({
           )}
         </div>
         
-        {/* Video status */}
         <div className={cn(
           "rounded-full flex items-center justify-center transition-colors",
           compact ? "w-5 h-5" : "w-6 h-6 sm:w-7 sm:h-7",
@@ -238,7 +376,7 @@ export function VideoTile({
       </div>
 
       {/* Username with speaking indicator */}
-      <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 right-1.5 sm:right-2 flex items-center gap-2">
+      <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 right-1.5 sm:right-2 flex items-center gap-2 z-20">
         <span className={cn(
           "inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/60 text-white truncate max-w-full",
           compact ? "text-xs" : "text-xs sm:text-sm"
