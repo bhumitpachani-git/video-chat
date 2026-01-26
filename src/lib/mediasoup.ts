@@ -126,9 +126,11 @@ export class MediaSoupClient {
   public onWhiteboardClear: (() => void) | null = null;
   public onWhiteboardUndo: (() => void) | null = null;
   public onWhiteboardSync: ((state: WhiteboardState) => void) | null = null;
+  public onWhiteboardPresent: ((data: { socketId: string; username: string; isPresenting: boolean }) => void) | null = null;
   
   // Notes callbacks
   public onNotesUpdated: ((notes: string) => void) | null = null;
+  public onNotesPresent: ((data: { socketId: string; username: string; isPresenting: boolean }) => void) | null = null;
   
   // Initial room state
   private initialWhiteboard: WhiteboardState | null = null;
@@ -276,10 +278,22 @@ export class MediaSoupClient {
         this.onWhiteboardSync?.(state);
       });
 
+      // Whiteboard present event - when someone shares whiteboard fullscreen
+      this.socket.on('whiteboard-present', (data: { socketId: string; username: string; isPresenting: boolean }) => {
+        console.log('[MediaSoup] 🎨 Whiteboard present:', data);
+        this.onWhiteboardPresent?.(data);
+      });
+
       // Notes events - server sends 'notes-updated' with { content }
       this.socket.on('notes-updated', ({ content }: { content: string }) => {
         console.log('[MediaSoup] 📝 Notes updated');
         this.onNotesUpdated?.(content);
+      });
+
+      // Notes present event - when someone shares notes fullscreen
+      this.socket.on('notes-present', (data: { socketId: string; username: string; isPresenting: boolean }) => {
+        console.log('[MediaSoup] 📝 Notes present:', data);
+        this.onNotesPresent?.(data);
       });
 
       setTimeout(() => {
@@ -1058,6 +1072,28 @@ export class MediaSoupClient {
       });
     } else {
       console.error('[MediaSoup] Cannot update notes - socket not connected');
+    }
+  }
+
+  // Present whiteboard to everyone
+  presentWhiteboard(isPresenting: boolean): void {
+    if (this.socket) {
+      console.log('[MediaSoup] 🎨 Presenting whiteboard:', isPresenting);
+      this.socket.emit('whiteboard-present', {
+        roomId: this.roomId,
+        isPresenting
+      });
+    }
+  }
+
+  // Present notes to everyone
+  presentNotes(isPresenting: boolean): void {
+    if (this.socket) {
+      console.log('[MediaSoup] 📝 Presenting notes:', isPresenting);
+      this.socket.emit('notes-present', {
+        roomId: this.roomId,
+        isPresenting
+      });
     }
   }
 

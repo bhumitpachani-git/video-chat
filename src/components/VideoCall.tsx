@@ -5,10 +5,12 @@ import { ChatPanel } from './ChatPanel';
 import { TranscriptionPanel, TranscriptEntry } from './TranscriptionPanel';
 import { ParticipantsList } from './ParticipantsList';
 import { SettingsPanel } from './SettingsPanel';
-import { PollsPanel } from './PollsPanel';
-import { WhiteboardPanel } from './WhiteboardPanel';
-import { NotesPanel } from './NotesPanel';
+import { PollModal } from './PollModal';
+import { CreatePollModal } from './CreatePollModal';
+import { FullscreenWhiteboard } from './FullscreenWhiteboard';
+import { FullscreenNotes } from './FullscreenNotes';
 import { RemoteStream, ChatMessage, ScreenShareStream, Poll, WhiteboardStroke } from '@/lib/mediasoup';
+import { PresentingState } from '@/hooks/useVideoCall';
 import { cn } from '@/lib/utils';
 import { LayoutGrid, Rows } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,6 +36,9 @@ interface VideoCallProps {
   polls: Poll[];
   whiteboardStrokes: WhiteboardStroke[];
   sharedNotes: string;
+  presentingState: PresentingState | null;
+  activePoll: Poll | null;
+  votedPolls: Set<string>;
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   onToggleScreenShare: () => void;
@@ -45,12 +50,16 @@ interface VideoCallProps {
   onCreatePoll: (question: string, options: string[], isAnonymous: boolean, allowMultiple: boolean) => void;
   onVote: (pollId: string, selectedOptions: number[]) => void;
   onClosePoll: (pollId: string) => void;
+  onDismissActivePoll: () => void;
   onWhiteboardStroke: (stroke: WhiteboardStroke) => void;
   onWhiteboardClear: () => void;
   onUpdateNotes: (notes: string) => void;
+  onPresentWhiteboard: (isPresenting: boolean) => void;
+  onPresentNotes: (isPresenting: boolean) => void;
+  onStopPresenting: () => void;
 }
 
-type PanelType = 'chat' | 'transcription' | 'participants' | 'settings' | 'polls' | 'whiteboard' | 'notes' | null;
+type PanelType = 'chat' | 'transcription' | 'participants' | 'settings' | null;
 
 export function VideoCall({
   localStream,
@@ -71,6 +80,9 @@ export function VideoCall({
   polls,
   whiteboardStrokes,
   sharedNotes,
+  presentingState,
+  activePoll,
+  votedPolls,
   onToggleVideo,
   onToggleAudio,
   onToggleScreenShare,
@@ -82,16 +94,22 @@ export function VideoCall({
   onCreatePoll,
   onVote,
   onClosePoll,
+  onDismissActivePoll,
   onWhiteboardStroke,
   onWhiteboardClear,
   onUpdateNotes,
+  onPresentWhiteboard,
+  onPresentNotes,
+  onStopPresenting,
 }: VideoCallProps) {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
+  const [showCreatePoll, setShowCreatePoll] = useState(false);
 
   const hasUnreadMessages = chatMessages.length > lastSeenMessageCount && activePanel !== 'chat';
   const participantCount = 1 + remoteStreams.size;
+  const isPresenter = presentingState?.socketId === socketId;
 
   useEffect(() => {
     if (activePanel === 'chat') {
@@ -104,7 +122,6 @@ export function VideoCall({
       setActivePanel(null);
     } else {
       setActivePanel(panel);
-      // Start transcription if opening transcription panel
       if (panel === 'transcription' && !isTranscribing) {
         onToggleTranscription();
       }
@@ -113,9 +130,25 @@ export function VideoCall({
 
   const closePanel = () => setActivePanel(null);
 
+  const handleToggleWhiteboard = () => {
+    if (presentingState?.type === 'whiteboard' && isPresenter) {
+      onStopPresenting();
+    } else {
+      onPresentWhiteboard(true);
+    }
+  };
+
+  const handleToggleNotes = () => {
+    if (presentingState?.type === 'notes' && isPresenter) {
+      onStopPresenting();
+    } else {
+      onPresentNotes(true);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-background flex flex-col overflow-hidden">
-      {/* Main video area - takes full screen */}
+      {/* Main video area */}
       <main className={cn(
         'flex-1 relative transition-all duration-300',
         activePanel && 'md:mr-80 lg:mr-96'
@@ -134,7 +167,6 @@ export function VideoCall({
 
         {/* Top bar with layout toggle and recording indicator */}
         <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-2 z-20">
-          {/* Layout toggle */}
           <div className="flex items-center bg-card/80 backdrop-blur-lg rounded-lg border border-border p-1">
             <Button
               variant={layoutMode === 'grid' ? 'default' : 'ghost'}
@@ -206,34 +238,46 @@ export function VideoCall({
         {activePanel === 'settings' && (
           <SettingsPanel onClose={closePanel} />
         )}
-        {activePanel === 'polls' && (
-          <PollsPanel
-            polls={polls}
-            onCreatePoll={onCreatePoll}
-            onVote={onVote}
-            onClosePoll={onClosePoll}
-            onClose={closePanel}
-            currentSocketId={socketId}
-          />
-        )}
-        {activePanel === 'whiteboard' && (
-          <WhiteboardPanel
-            strokes={whiteboardStrokes}
-            onStroke={onWhiteboardStroke}
-            onClear={onWhiteboardClear}
-            onClose={closePanel}
-          />
-        )}
-        {activePanel === 'notes' && (
-          <NotesPanel
-            notes={sharedNotes}
-            onUpdateNotes={onUpdateNotes}
-            onClose={closePanel}
-          />
-        )}
       </div>
 
-      {/* Controls - fixed at bottom */}
+      {/* Fullscreen Whiteboard Overlay */}
+      {presentingState?.type === 'whiteboard' && (
+        <FullscreenWhiteboard
+          strokes={whiteboardStrokes}
+          presenterName={presentingState.username}
+          isPresenter={isPresenter}
+          onStroke={isPresenter ? onWhiteboardStroke : undefined}
+          onClose={isPresenter ? onStopPresenting : () => {}}
+        />
+      )}
+
+      {/* Fullscreen Notes Overlay */}
+      {presentingState?.type === 'notes' && (
+        <FullscreenNotes
+          notes={sharedNotes}
+          presenterName={presentingState.username}
+          isPresenter={isPresenter}
+          onUpdateNotes={isPresenter ? onUpdateNotes : undefined}
+          onClose={isPresenter ? onStopPresenting : () => {}}
+        />
+      )}
+
+      {/* Poll Modal */}
+      <PollModal
+        poll={activePoll}
+        onVote={onVote}
+        onClose={onDismissActivePoll}
+        hasVoted={activePoll ? votedPolls.has(activePoll.id) : false}
+      />
+
+      {/* Create Poll Modal */}
+      <CreatePollModal
+        open={showCreatePoll}
+        onOpenChange={setShowCreatePoll}
+        onCreatePoll={onCreatePoll}
+      />
+
+      {/* Controls */}
       <CallControls
         isVideoEnabled={isVideoEnabled}
         isAudioEnabled={isAudioEnabled}
@@ -253,9 +297,9 @@ export function VideoCall({
         onToggleRecording={onToggleRecording}
         onToggleParticipants={() => togglePanel('participants')}
         onToggleSettings={() => togglePanel('settings')}
-        onTogglePolls={() => togglePanel('polls')}
-        onToggleWhiteboard={() => togglePanel('whiteboard')}
-        onToggleNotes={() => togglePanel('notes')}
+        onTogglePolls={() => setShowCreatePoll(true)}
+        onToggleWhiteboard={handleToggleWhiteboard}
+        onToggleNotes={handleToggleNotes}
         onLeaveCall={onLeaveCall}
       />
     </div>

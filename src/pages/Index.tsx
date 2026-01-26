@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { useVideoCall } from '@/hooks/useVideoCall';
 import { JoinRoomForm } from '@/components/JoinRoomForm';
 import { VideoCall } from '@/components/VideoCall';
 
 const Index = () => {
+  const [votedPolls, setVotedPolls] = useState<Set<string>>(new Set());
+  
   const {
     connectionState,
     localStream,
@@ -24,6 +27,8 @@ const Index = () => {
     polls,
     whiteboardStrokes,
     sharedNotes,
+    presentingState,
+    activePoll,
     joinRoom,
     leaveRoom,
     toggleVideo,
@@ -36,13 +41,22 @@ const Index = () => {
     createPoll,
     submitVote,
     closePoll,
+    dismissActivePoll,
     sendWhiteboardStroke,
     clearWhiteboard,
     updateNotes,
+    presentWhiteboard,
+    presentNotes,
+    stopPresenting,
   } = useVideoCall();
 
   const isConnecting = connectionState === 'connecting';
   const isInCall = connectionState === 'in-call';
+
+  const handleVote = (pollId: string, selectedOptions: number[]) => {
+    submitVote(pollId, selectedOptions);
+    setVotedPolls(prev => new Set(prev).add(pollId));
+  };
 
   if (isInCall) {
     return (
@@ -65,6 +79,9 @@ const Index = () => {
         polls={polls}
         whiteboardStrokes={whiteboardStrokes}
         sharedNotes={sharedNotes}
+        presentingState={presentingState}
+        activePoll={activePoll}
+        votedPolls={votedPolls}
         onToggleVideo={toggleVideo}
         onToggleAudio={toggleAudio}
         onToggleScreenShare={toggleScreenShare}
@@ -74,11 +91,15 @@ const Index = () => {
         onSendMessage={sendChatMessage}
         onLeaveCall={leaveRoom}
         onCreatePoll={createPoll}
-        onVote={submitVote}
+        onVote={handleVote}
         onClosePoll={closePoll}
+        onDismissActivePoll={dismissActivePoll}
         onWhiteboardStroke={sendWhiteboardStroke}
         onWhiteboardClear={clearWhiteboard}
         onUpdateNotes={updateNotes}
+        onPresentWhiteboard={presentWhiteboard}
+        onPresentNotes={presentNotes}
+        onStopPresenting={stopPresenting}
       />
     );
   }

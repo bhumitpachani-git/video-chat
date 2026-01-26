@@ -4,6 +4,12 @@ import { TranscriptEntry } from '@/components/TranscriptionPanel';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'in-call' | 'error';
 
+export interface PresentingState {
+  type: 'whiteboard' | 'notes' | null;
+  socketId: string;
+  username: string;
+}
+
 export interface UseVideoCallReturn {
   connectionState: ConnectionState;
   localStream: MediaStream | null;
@@ -25,6 +31,8 @@ export interface UseVideoCallReturn {
   polls: Poll[];
   whiteboardStrokes: WhiteboardStroke[];
   sharedNotes: string;
+  presentingState: PresentingState | null;
+  activePoll: Poll | null;
   joinRoom: (roomId: string, username: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
   toggleVideo: () => void;
@@ -37,9 +45,13 @@ export interface UseVideoCallReturn {
   createPoll: (question: string, options: string[], isAnonymous: boolean, allowMultiple: boolean) => void;
   submitVote: (pollId: string, selectedOptions: number[]) => void;
   closePoll: (pollId: string) => void;
+  dismissActivePoll: () => void;
   sendWhiteboardStroke: (stroke: WhiteboardStroke) => void;
   clearWhiteboard: () => void;
   updateNotes: (notes: string) => void;
+  presentWhiteboard: (isPresenting: boolean) => void;
+  presentNotes: (isPresenting: boolean) => void;
+  stopPresenting: () => void;
 }
 
 export function useVideoCall(): UseVideoCallReturn {
@@ -62,6 +74,8 @@ export function useVideoCall(): UseVideoCallReturn {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [whiteboardStrokes, setWhiteboardStrokes] = useState<WhiteboardStroke[]>([]);
   const [sharedNotes, setSharedNotes] = useState('');
+  const [presentingState, setPresentingState] = useState<PresentingState | null>(null);
+  const [activePoll, setActivePoll] = useState<Poll | null>(null);
   
   const clientRef = useRef<MediaSoupClient | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -183,10 +197,12 @@ export function useVideoCall(): UseVideoCallReturn {
         setIsRecording(false);
       };
 
-      // Handle poll events
+      // Handle poll events - show modal for new polls
       client.onNewPoll = (poll) => {
         console.log('[Hook] New poll:', poll.question);
         setPolls(prev => [...prev, poll]);
+        // Show modal for new active poll
+        setActivePoll(poll);
       };
 
       client.onPollUpdated = (data) => {
@@ -196,6 +212,11 @@ export function useVideoCall(): UseVideoCallReturn {
             ? { ...p, results: data.results, totalVotes: data.totalVotes }
             : p
         ));
+        // Update active poll if it's the one being updated
+        setActivePoll(prev => prev?.id === data.pollId 
+          ? { ...prev, results: data.results, totalVotes: data.totalVotes }
+          : prev
+        );
       };
 
       client.onPollClosed = (data) => {
@@ -205,6 +226,8 @@ export function useVideoCall(): UseVideoCallReturn {
             ? { ...p, results: data.finalResults, totalVotes: data.totalVotes, active: false }
             : p
         ));
+        // Close modal if this poll was active
+        setActivePoll(prev => prev?.id === data.pollId ? null : prev);
       };
 
       client.onPollsSync = (existingPolls) => {
@@ -233,10 +256,42 @@ export function useVideoCall(): UseVideoCallReturn {
         setWhiteboardStrokes(state.strokes);
       };
 
+      // Handle whiteboard present event - show fullscreen for all
+      client.onWhiteboardPresent = (data) => {
+        console.log('[Hook] Whiteboard present:', data);
+        if (data.isPresenting) {
+          setPresentingState({
+            type: 'whiteboard',
+            socketId: data.socketId,
+            username: data.username,
+          });
+        } else {
+          setPresentingState(prev => 
+            prev?.type === 'whiteboard' && prev.socketId === data.socketId ? null : prev
+          );
+        }
+      };
+
       // Handle notes events
       client.onNotesUpdated = (notes) => {
         console.log('[Hook] Notes updated');
         setSharedNotes(notes);
+      };
+
+      // Handle notes present event - show fullscreen for all
+      client.onNotesPresent = (data) => {
+        console.log('[Hook] Notes present:', data);
+        if (data.isPresenting) {
+          setPresentingState({
+            type: 'notes',
+            socketId: data.socketId,
+            username: data.username,
+          });
+        } else {
+          setPresentingState(prev => 
+            prev?.type === 'notes' && prev.socketId === data.socketId ? null : prev
+          );
+        }
       };
 
       // Connect to server
@@ -457,6 +512,50 @@ export function useVideoCall(): UseVideoCallReturn {
     }
   }, []);
 
+  // Presenting handlers
+  const presentWhiteboard = useCallback((isPresenting: boolean) => {
+    if (clientRef.current) {
+      clientRef.current.presentWhiteboard(isPresenting);
+      if (isPresenting) {
+        setPresentingState({
+          type: 'whiteboard',
+          socketId: clientRef.current.getSocketId() || '',
+          username,
+        });
+      } else {
+        setPresentingState(null);
+      }
+    }
+  }, [username]);
+
+  const presentNotes = useCallback((isPresenting: boolean) => {
+    if (clientRef.current) {
+      clientRef.current.presentNotes(isPresenting);
+      if (isPresenting) {
+        setPresentingState({
+          type: 'notes',
+          socketId: clientRef.current.getSocketId() || '',
+          username,
+        });
+      } else {
+        setPresentingState(null);
+      }
+    }
+  }, [username]);
+
+  const stopPresenting = useCallback(() => {
+    if (presentingState?.type === 'whiteboard') {
+      presentWhiteboard(false);
+    } else if (presentingState?.type === 'notes') {
+      presentNotes(false);
+    }
+    setPresentingState(null);
+  }, [presentingState, presentWhiteboard, presentNotes]);
+
+  const dismissActivePoll = useCallback(() => {
+    setActivePoll(null);
+  }, []);
+
   return {
     connectionState,
     localStream,
@@ -478,6 +577,8 @@ export function useVideoCall(): UseVideoCallReturn {
     polls,
     whiteboardStrokes,
     sharedNotes,
+    presentingState,
+    activePoll,
     joinRoom,
     leaveRoom,
     toggleVideo,
@@ -490,8 +591,12 @@ export function useVideoCall(): UseVideoCallReturn {
     createPoll,
     submitVote,
     closePoll,
+    dismissActivePoll,
     sendWhiteboardStroke,
     clearWhiteboard,
     updateNotes,
+    presentWhiteboard,
+    presentNotes,
+    stopPresenting,
   };
 }
