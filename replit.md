@@ -64,3 +64,8 @@ npm run dev
 - Extended MediaSoupClient with collaborative feature handlers
 - Updated useVideoCall hook with polls, whiteboard, and notes state
 - Added collaborative feature menu items in CallControls dropdown
+- Implemented dual layout modes: Grid view and Speaker view with toggle controls
+- Enhanced VideoTile with proper blur effect using duplicate blurred video layer
+- Fixed background image overlay to work correctly with video
+- Improved responsive design for mobile, tablet, and desktop screens
+- Added layout toggle buttons in the top-right corner of the video area
