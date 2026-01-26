@@ -192,8 +192,8 @@ export function useParticipantMediaStatus(
   isLocal: boolean = false
 ): ParticipantMediaStatus {
   const [status, setStatus] = useState<ParticipantMediaStatus>({
-    isMuted: true,
-    isVideoOff: true,
+    isMuted: false, // Default to not muted until we know
+    isVideoOff: false, // Default to video on until we know
     isSpeaking: false,
     audioLevel: 0,
   });
@@ -218,12 +218,15 @@ export function useParticipantMediaStatus(
       const audioTracks = stream.getAudioTracks();
       const videoTracks = stream.getVideoTracks();
       
-      const hasActiveAudio = audioTracks.some(track => 
+      // Check if tracks exist and are enabled
+      const hasActiveAudio = audioTracks.length > 0 && audioTracks.some(track => 
         track.readyState === 'live' && track.enabled
       );
-      const hasActiveVideo = videoTracks.some(track => 
+      const hasActiveVideo = videoTracks.length > 0 && videoTracks.some(track => 
         track.readyState === 'live' && track.enabled
       );
+
+      console.log('[MediaStatus] Check for stream - audio:', hasActiveAudio, 'video:', hasActiveVideo, 'audioTracks:', audioTracks.length, 'videoTracks:', videoTracks.length);
 
       setStatus(prev => ({
         ...prev,
