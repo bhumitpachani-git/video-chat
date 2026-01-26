@@ -10,6 +10,10 @@ import { WhiteboardPanel } from './WhiteboardPanel';
 import { NotesPanel } from './NotesPanel';
 import { RemoteStream, ChatMessage, ScreenShareStream, Poll, WhiteboardStroke } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
+import { LayoutGrid, Rows } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+export type LayoutMode = 'grid' | 'speaker';
 
 interface VideoCallProps {
   localStream: MediaStream | null;
@@ -84,6 +88,7 @@ export function VideoCall({
 }: VideoCallProps) {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
 
   const hasUnreadMessages = chatMessages.length > lastSeenMessageCount && activePanel !== 'chat';
   const participantCount = 1 + remoteStreams.size;
@@ -124,13 +129,40 @@ export function VideoCall({
           isVideoEnabled={isVideoEnabled}
           isAudioEnabled={isAudioEnabled}
           isScreenSharing={isScreenSharing}
+          layoutMode={layoutMode}
         />
+
+        {/* Top bar with layout toggle and recording indicator */}
+        <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-2 z-20">
+          {/* Layout toggle */}
+          <div className="flex items-center bg-card/80 backdrop-blur-lg rounded-lg border border-border p-1">
+            <Button
+              variant={layoutMode === 'grid' ? 'default' : 'ghost'}
+              size="icon"
+              className="h-8 w-8 rounded-md"
+              onClick={() => setLayoutMode('grid')}
+              data-testid="button-layout-grid"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={layoutMode === 'speaker' ? 'default' : 'ghost'}
+              size="icon"
+              className="h-8 w-8 rounded-md"
+              onClick={() => setLayoutMode('speaker')}
+              data-testid="button-layout-speaker"
+            >
+              <Rows className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
 
         {/* Recording indicator */}
         {isRecording && (
-          <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-destructive/90 text-destructive-foreground text-sm font-medium z-20">
+          <div className="absolute top-2 left-2 sm:top-4 sm:left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-destructive/90 text-destructive-foreground text-sm font-medium z-20">
             <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-            Recording
+            <span className="hidden sm:inline">Recording</span>
+            <span className="sm:hidden">REC</span>
           </div>
         )}
       </main>

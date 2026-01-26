@@ -118,12 +118,33 @@ export function VideoTile({
       isLocal && !isSpeaking && 'ring-2 ring-primary/40',
       className
     )}>
-      {/* Background image for local video */}
+      {/* Background image for local video - shown behind blurred video */}
       {isLocal && videoSettings.backgroundImage && showVideo && (
         <div 
-          className="absolute inset-0 bg-cover bg-center"
+          className="absolute inset-0 bg-cover bg-center z-0"
           style={{ backgroundImage: `url(${videoSettings.backgroundImage})` }}
         />
+      )}
+      
+      {/* Blur background layer - creates frosted glass effect */}
+      {isLocal && videoSettings.backgroundBlur && showVideo && (
+        <div className="absolute inset-0 z-0">
+          <video
+            autoPlay
+            playsInline
+            muted
+            ref={(el) => {
+              if (el && stream) {
+                el.srcObject = stream;
+              }
+            }}
+            className={cn(
+              'w-full h-full object-cover blur-xl scale-110',
+              videoSettings.mirrorVideo && 'transform scale-x-[-1] scale-y-100'
+            )}
+            style={{ filter: 'blur(24px) brightness(0.7)' }}
+          />
+        </div>
       )}
       
       {/* Video element */}
@@ -133,22 +154,11 @@ export function VideoTile({
         playsInline
         muted={isLocal}
         className={cn(
-          'absolute inset-0 w-full h-full object-cover',
+          'absolute inset-0 w-full h-full object-cover z-10',
           showVideo ? 'opacity-100' : 'opacity-0',
-          isLocal && videoSettings.mirrorVideo && 'transform scale-x-[-1]',
-          isLocal && !videoSettings.mirrorVideo && '',
-          isLocal && videoSettings.backgroundBlur && 'backdrop-blur-none'
+          isLocal && videoSettings.mirrorVideo && 'transform scale-x-[-1]'
         )}
-        style={isLocal && videoSettings.backgroundBlur ? {
-          filter: 'none',
-          WebkitMaskImage: 'none',
-        } : undefined}
       />
-      
-      {/* Blur overlay for local video background */}
-      {isLocal && videoSettings.backgroundBlur && showVideo && (
-        <div className="absolute inset-0 backdrop-blur-xl bg-black/20 -z-10" />
-      )}
 
       {/* Avatar placeholder when no video */}
       {!showVideo && (

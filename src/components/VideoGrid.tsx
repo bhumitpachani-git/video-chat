@@ -1,9 +1,10 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { VideoTile } from './VideoTile';
 import { RemoteStream, ScreenShareStream } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
 import { Monitor, Users } from 'lucide-react';
 import { useRemoteAudioLevels } from '@/hooks/useAudioProcessor';
+import { LayoutMode } from './VideoCall';
 
 interface ParticipantStatus {
   socketId: string;
@@ -21,6 +22,7 @@ interface VideoGridProps {
   isAudioEnabled: boolean;
   isScreenSharing: boolean;
   remoteParticipantStatus?: Map<string, ParticipantStatus>;
+  layoutMode?: LayoutMode;
 }
 
 export function VideoGrid({
@@ -33,6 +35,7 @@ export function VideoGrid({
   isAudioEnabled,
   isScreenSharing,
   remoteParticipantStatus,
+  layoutMode = 'grid',
 }: VideoGridProps) {
   const remoteArray = Array.from(remoteStreams.values());
   const screenShareArray = Array.from(screenShareStreams.values());
@@ -137,6 +140,75 @@ export function VideoGrid({
             const status = getParticipantStatus(remote.socketId);
             return (
               <div key={remote.socketId} className="w-28 sm:w-40 shrink-0">
+                <VideoTile
+                  stream={remote.stream}
+                  username={remote.username}
+                  isMuted={status.isMuted}
+                  isVideoOff={status.isVideoOff}
+                  isSpeaking={status.isSpeaking}
+                  compact
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Speaker layout - main speaker with thumbnails
+  if (layoutMode === 'speaker' && totalParticipants > 1) {
+    const mainParticipant = remoteArray[0];
+    const otherParticipants = remoteArray.slice(1);
+    
+    return (
+      <div className="h-full w-full flex flex-col p-2 sm:p-4 pb-24 sm:pb-28 gap-2 sm:gap-3">
+        {/* Participant count indicator */}
+        <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-10 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-card/80 backdrop-blur border border-border text-xs sm:text-sm">
+          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
+          <span className="font-medium">{totalParticipants}</span>
+        </div>
+
+        {/* Main speaker */}
+        <div className="flex-1 min-h-0">
+          {mainParticipant ? (
+            <VideoTile
+              stream={mainParticipant.stream}
+              username={mainParticipant.username}
+              isMuted={getParticipantStatus(mainParticipant.socketId).isMuted}
+              isVideoOff={getParticipantStatus(mainParticipant.socketId).isVideoOff}
+              isSpeaking={getParticipantStatus(mainParticipant.socketId).isSpeaking}
+            />
+          ) : (
+            <VideoTile
+              stream={localStream}
+              username={username}
+              isLocal
+              isMuted={!isAudioEnabled}
+              isVideoOff={!isVideoEnabled}
+            />
+          )}
+        </div>
+
+        {/* Thumbnail strip */}
+        <div className="h-20 sm:h-28 shrink-0 flex gap-2 overflow-x-auto">
+          {/* Local video thumbnail */}
+          <div className="w-28 sm:w-36 shrink-0">
+            <VideoTile
+              stream={localStream}
+              username={username}
+              isLocal
+              isMuted={!isAudioEnabled}
+              isVideoOff={!isVideoEnabled}
+              compact
+            />
+          </div>
+          
+          {/* Other remote participants */}
+          {otherParticipants.map((remote) => {
+            const status = getParticipantStatus(remote.socketId);
+            return (
+              <div key={remote.socketId} className="w-28 sm:w-36 shrink-0">
                 <VideoTile
                   stream={remote.stream}
                   username={remote.username}
