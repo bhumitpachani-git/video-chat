@@ -123,6 +123,7 @@ export class MediaSoupClient {
   // Whiteboard callbacks
   public onWhiteboardStroke: ((stroke: WhiteboardStroke) => void) | null = null;
   public onWhiteboardClear: (() => void) | null = null;
+  public onWhiteboardUndo: (() => void) | null = null;
   public onWhiteboardSync: ((state: WhiteboardState) => void) | null = null;
   
   // Notes callbacks
@@ -251,15 +252,21 @@ export class MediaSoupClient {
         this.onPollClosed?.(data);
       });
 
-      // Whiteboard events
-      this.socket.on('whiteboard-stroke', (stroke: WhiteboardStroke) => {
+      // Whiteboard events - server sends 'whiteboard-draw' event
+      this.socket.on('whiteboard-draw', (stroke: WhiteboardStroke) => {
         console.log('[MediaSoup] 🎨 Whiteboard stroke received');
         this.onWhiteboardStroke?.(stroke);
       });
 
-      this.socket.on('whiteboard-clear', () => {
+      this.socket.on('whiteboard-cleared', () => {
         console.log('[MediaSoup] 🎨 Whiteboard cleared');
         this.onWhiteboardClear?.();
+      });
+
+      this.socket.on('whiteboard-undo', () => {
+        console.log('[MediaSoup] 🎨 Whiteboard undo');
+        // Handle undo by removing last stroke
+        this.onWhiteboardUndo?.();
       });
 
       this.socket.on('whiteboard-sync', (state: WhiteboardState) => {
@@ -267,10 +274,10 @@ export class MediaSoupClient {
         this.onWhiteboardSync?.(state);
       });
 
-      // Notes events
-      this.socket.on('notes-updated', ({ notes }: { notes: string }) => {
+      // Notes events - server sends 'notes-updated' with { content }
+      this.socket.on('notes-updated', ({ content }: { content: string }) => {
         console.log('[MediaSoup] 📝 Notes updated');
-        this.onNotesUpdated?.(notes);
+        this.onNotesUpdated?.(content);
       });
 
       setTimeout(() => {
@@ -997,10 +1004,10 @@ export class MediaSoupClient {
     }
   }
 
-  // Whiteboard methods
+  // Whiteboard methods - server expects 'whiteboard-draw' event
   sendWhiteboardStroke(stroke: WhiteboardStroke): void {
     if (this.socket) {
-      this.socket.emit('whiteboard-stroke', {
+      this.socket.emit('whiteboard-draw', {
         roomId: this.roomId,
         stroke
       });
@@ -1014,18 +1021,25 @@ export class MediaSoupClient {
     }
   }
 
+  undoWhiteboard(): void {
+    if (this.socket) {
+      console.log('[MediaSoup] Undo whiteboard...');
+      this.socket.emit('whiteboard-undo', { roomId: this.roomId });
+    }
+  }
+
   requestWhiteboardSync(): void {
     if (this.socket) {
       this.socket.emit('whiteboard-sync-request', { roomId: this.roomId });
     }
   }
 
-  // Notes methods
+  // Notes methods - server expects 'notes-update' with { content }
   updateNotes(notes: string): void {
     if (this.socket) {
-      this.socket.emit('update-notes', {
+      this.socket.emit('notes-update', {
         roomId: this.roomId,
-        notes
+        content: notes
       });
     }
   }

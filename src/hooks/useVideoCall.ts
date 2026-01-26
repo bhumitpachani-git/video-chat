@@ -218,6 +218,11 @@ export function useVideoCall(): UseVideoCallReturn {
         setWhiteboardStrokes([]);
       };
 
+      client.onWhiteboardUndo = () => {
+        console.log('[Hook] Whiteboard undo');
+        setWhiteboardStrokes(prev => prev.slice(0, -1));
+      };
+
       client.onWhiteboardSync = (state) => {
         console.log('[Hook] Whiteboard synced');
         setWhiteboardStrokes(state.strokes);
