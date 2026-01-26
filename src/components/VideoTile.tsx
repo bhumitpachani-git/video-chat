@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Mic, MicOff, Video, VideoOff, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParticipantMediaStatus } from '@/hooks/useAdvancedAudioProcessor';
+import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 
 interface VideoTileProps {
   stream: MediaStream | null;
@@ -26,6 +27,7 @@ export function VideoTile({
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasVideo, setHasVideo] = useState(false);
+  const { settings: videoSettings } = useVideoSettings();
   
   // Use actual media status detection
   const actualStatus = useParticipantMediaStatus(stream, isLocal);
@@ -116,6 +118,14 @@ export function VideoTile({
       isLocal && !isSpeaking && 'ring-2 ring-primary/40',
       className
     )}>
+      {/* Background image for local video */}
+      {isLocal && videoSettings.backgroundImage && showVideo && (
+        <div 
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${videoSettings.backgroundImage})` }}
+        />
+      )}
+      
       {/* Video element */}
       <video
         ref={videoRef}
@@ -125,9 +135,20 @@ export function VideoTile({
         className={cn(
           'absolute inset-0 w-full h-full object-cover',
           showVideo ? 'opacity-100' : 'opacity-0',
-          isLocal && 'transform scale-x-[-1]'
+          isLocal && videoSettings.mirrorVideo && 'transform scale-x-[-1]',
+          isLocal && !videoSettings.mirrorVideo && '',
+          isLocal && videoSettings.backgroundBlur && 'backdrop-blur-none'
         )}
+        style={isLocal && videoSettings.backgroundBlur ? {
+          filter: 'none',
+          WebkitMaskImage: 'none',
+        } : undefined}
       />
+      
+      {/* Blur overlay for local video background */}
+      {isLocal && videoSettings.backgroundBlur && showVideo && (
+        <div className="absolute inset-0 backdrop-blur-xl bg-black/20 -z-10" />
+      )}
 
       {/* Avatar placeholder when no video */}
       {!showVideo && (

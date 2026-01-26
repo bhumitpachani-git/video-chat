@@ -1,17 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { X, Camera, Mic, Volume2, Shield, Sliders } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Camera, Mic, Volume2, Shield, Sliders, Image, Check } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 
 interface SettingsPanelProps {
   onClose: () => void;
 }
 
+const backgroundImages = [
+  { id: 'none', label: 'None', url: null },
+  { id: 'office', label: 'Office', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80' },
+  { id: 'nature', label: 'Nature', url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80' },
+  { id: 'city', label: 'City', url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=80' },
+  { id: 'abstract', label: 'Abstract', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80' },
+  { id: 'minimal', label: 'Minimal', url: 'https://images.unsplash.com/photo-1545239351-cefa43af60f3?w=800&q=80' },
+];
+
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
+  const { settings: videoSettings, updateSettings } = useVideoSettings();
+  
   const [devices, setDevices] = useState<{
     audioInput: MediaDeviceInfo[];
     audioOutput: MediaDeviceInfo[];
@@ -28,13 +40,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     videoInput: '',
   });
 
-  const [settings, setSettings] = useState({
+  const [audioSettings, setAudioSettings] = useState({
     noiseCancellation: true,
     echoCancellation: true,
     autoGainControl: true,
-    mirrorVideo: true,
     highQualityAudio: true,
-    backgroundBlur: false,
   });
 
   useEffect(() => {
@@ -136,16 +146,55 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               <SettingSwitch
                 label="Mirror video"
                 description="Flip your video horizontally"
-                checked={settings.mirrorVideo}
-                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, mirrorVideo: checked }))}
+                checked={videoSettings.mirrorVideo}
+                onCheckedChange={(checked) => updateSettings({ mirrorVideo: checked })}
               />
 
               <SettingSwitch
                 label="Background blur"
                 description="Blur your background"
-                checked={settings.backgroundBlur}
-                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, backgroundBlur: checked }))}
+                checked={videoSettings.backgroundBlur}
+                onCheckedChange={(checked) => updateSettings({ backgroundBlur: checked, backgroundImage: null })}
               />
+
+              <div className="space-y-2 pt-2">
+                <Label className="text-xs text-muted-foreground">Virtual Background</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {backgroundImages.map((bg) => (
+                    <button
+                      key={bg.id}
+                      onClick={() => updateSettings({ backgroundImage: bg.url, backgroundBlur: false })}
+                      className={cn(
+                        "relative aspect-video rounded-lg overflow-hidden border-2 transition-all",
+                        videoSettings.backgroundImage === bg.url
+                          ? "border-primary ring-2 ring-primary/20"
+                          : "border-border/50 hover:border-primary/50"
+                      )}
+                      data-testid={`button-background-${bg.id}`}
+                    >
+                      {bg.url ? (
+                        <img
+                          src={bg.url}
+                          alt={bg.label}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-muted flex items-center justify-center">
+                          <X className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                      )}
+                      {videoSettings.backgroundImage === bg.url && (
+                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                          <Check className="w-4 h-4 text-primary" />
+                        </div>
+                      )}
+                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] py-0.5 text-center">
+                        {bg.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -179,29 +228,29 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               <SettingSwitch
                 label="Noise cancellation"
                 description="Reduce background noise"
-                checked={settings.noiseCancellation}
-                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, noiseCancellation: checked }))}
+                checked={audioSettings.noiseCancellation}
+                onCheckedChange={(checked) => setAudioSettings(prev => ({ ...prev, noiseCancellation: checked }))}
               />
 
               <SettingSwitch
                 label="Echo cancellation"
                 description="Prevent audio feedback"
-                checked={settings.echoCancellation}
-                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, echoCancellation: checked }))}
+                checked={audioSettings.echoCancellation}
+                onCheckedChange={(checked) => setAudioSettings(prev => ({ ...prev, echoCancellation: checked }))}
               />
 
               <SettingSwitch
                 label="Auto gain control"
                 description="Automatically adjust volume"
-                checked={settings.autoGainControl}
-                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, autoGainControl: checked }))}
+                checked={audioSettings.autoGainControl}
+                onCheckedChange={(checked) => setAudioSettings(prev => ({ ...prev, autoGainControl: checked }))}
               />
 
               <SettingSwitch
                 label="High quality audio"
                 description="Use 48kHz sample rate"
-                checked={settings.highQualityAudio}
-                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, highQualityAudio: checked }))}
+                checked={audioSettings.highQualityAudio}
+                onCheckedChange={(checked) => setAudioSettings(prev => ({ ...prev, highQualityAudio: checked }))}
               />
             </div>
           </div>
