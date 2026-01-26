@@ -185,12 +185,12 @@ export function useVideoCall(): UseVideoCallReturn {
 
       // Handle poll events
       client.onNewPoll = (poll) => {
-        console.log('[Hook] New poll:', poll);
+        console.log('[Hook] New poll:', poll.question);
         setPolls(prev => [...prev, poll]);
       };
 
       client.onPollUpdated = (data) => {
-        console.log('[Hook] Poll updated:', data);
+        console.log('[Hook] Poll updated:', data.pollId);
         setPolls(prev => prev.map(p => 
           p.id === data.pollId 
             ? { ...p, results: data.results, totalVotes: data.totalVotes }
@@ -199,12 +199,17 @@ export function useVideoCall(): UseVideoCallReturn {
       };
 
       client.onPollClosed = (data) => {
-        console.log('[Hook] Poll closed:', data);
+        console.log('[Hook] Poll closed:', data.pollId);
         setPolls(prev => prev.map(p => 
           p.id === data.pollId 
             ? { ...p, results: data.finalResults, totalVotes: data.totalVotes, active: false }
             : p
         ));
+      };
+
+      client.onPollsSync = (existingPolls) => {
+        console.log('[Hook] Polls synced:', existingPolls.length);
+        setPolls(existingPolls);
       };
 
       // Handle whiteboard events

@@ -119,6 +119,7 @@ export class MediaSoupClient {
   public onNewPoll: ((poll: Poll) => void) | null = null;
   public onPollUpdated: ((data: { pollId: string; results: number[]; totalVotes: number }) => void) | null = null;
   public onPollClosed: ((data: { pollId: string; finalResults: number[]; totalVotes: number }) => void) | null = null;
+  public onPollsSync: ((polls: Poll[]) => void) | null = null;
   
   // Whiteboard callbacks
   public onWhiteboardStroke: ((stroke: WhiteboardStroke) => void) | null = null;
@@ -132,6 +133,7 @@ export class MediaSoupClient {
   // Initial room state
   private initialWhiteboard: WhiteboardState | null = null;
   private initialNotes: string = '';
+  private initialPolls: Poll[] = [];
 
   async connect(): Promise<Socket> {
     return new Promise((resolve, reject) => {
@@ -320,12 +322,19 @@ export class MediaSoupClient {
           
           // Store and emit initial room state
           if (response.whiteboard) {
+            console.log('[MediaSoup] 🎨 Initial whiteboard state:', response.whiteboard.strokes?.length || 0, 'strokes');
             this.initialWhiteboard = response.whiteboard;
             this.onWhiteboardSync?.(response.whiteboard);
           }
           if (response.notes) {
+            console.log('[MediaSoup] 📝 Initial notes:', response.notes.length, 'chars');
             this.initialNotes = response.notes;
             this.onNotesUpdated?.(response.notes);
+          }
+          if (response.polls && response.polls.length > 0) {
+            console.log('[MediaSoup] 📊 Initial polls:', response.polls.length);
+            this.initialPolls = response.polls;
+            this.onPollsSync?.(response.polls);
           }
           
           resolve(response.peers);
@@ -1007,23 +1016,28 @@ export class MediaSoupClient {
   // Whiteboard methods - server expects 'whiteboard-draw' event
   sendWhiteboardStroke(stroke: WhiteboardStroke): void {
     if (this.socket) {
+      console.log('[MediaSoup] 🎨 Sending whiteboard stroke to room:', this.roomId);
       this.socket.emit('whiteboard-draw', {
         roomId: this.roomId,
         stroke
       });
+    } else {
+      console.error('[MediaSoup] Cannot send whiteboard stroke - socket not connected');
     }
   }
 
   clearWhiteboard(): void {
     if (this.socket) {
-      console.log('[MediaSoup] Clearing whiteboard...');
+      console.log('[MediaSoup] 🎨 Clearing whiteboard in room:', this.roomId);
       this.socket.emit('whiteboard-clear', { roomId: this.roomId });
+    } else {
+      console.error('[MediaSoup] Cannot clear whiteboard - socket not connected');
     }
   }
 
   undoWhiteboard(): void {
     if (this.socket) {
-      console.log('[MediaSoup] Undo whiteboard...');
+      console.log('[MediaSoup] 🎨 Undo whiteboard in room:', this.roomId);
       this.socket.emit('whiteboard-undo', { roomId: this.roomId });
     }
   }
@@ -1034,13 +1048,16 @@ export class MediaSoupClient {
     }
   }
 
-  // Notes methods - server expects 'notes-update' with { content }
+  // Notes methods - server expects 'notes-update' with { roomId, content }
   updateNotes(notes: string): void {
     if (this.socket) {
+      console.log('[MediaSoup] 📝 Sending notes update to room:', this.roomId, 'length:', notes.length);
       this.socket.emit('notes-update', {
         roomId: this.roomId,
         content: notes
       });
+    } else {
+      console.error('[MediaSoup] Cannot update notes - socket not connected');
     }
   }
 
