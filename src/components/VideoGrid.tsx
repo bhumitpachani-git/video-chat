@@ -1,5 +1,6 @@
 import { useRef, useEffect, useMemo } from 'react';
 import { VideoTile } from './VideoTile';
+import { VideoTileWithBackground } from './VideoTileWithBackground';
 import { RemoteStream, ScreenShareStream } from '@/lib/mediasoup';
 import { cn } from '@/lib/utils';
 import { Monitor, Users } from 'lucide-react';
@@ -127,7 +128,8 @@ export function VideoGrid({
         {/* Participants strip - horizontal scroll on mobile */}
         <div className="h-20 sm:h-28 shrink-0 flex gap-2 overflow-x-auto">
           <div className="w-28 sm:w-40 shrink-0">
-            <VideoTile
+            {/* Use VideoTileWithBackground for local video (has virtual background) */}
+            <VideoTileWithBackground
               stream={localStream}
               username={username}
               isLocal
@@ -180,7 +182,7 @@ export function VideoGrid({
               isSpeaking={getParticipantStatus(mainParticipant.socketId).isSpeaking}
             />
           ) : (
-            <VideoTile
+            <VideoTileWithBackground
               stream={localStream}
               username={username}
               isLocal
@@ -194,7 +196,7 @@ export function VideoGrid({
         <div className="h-20 sm:h-28 shrink-0 flex gap-2 overflow-x-auto">
           {/* Local video thumbnail */}
           <div className="w-28 sm:w-36 shrink-0">
-            <VideoTile
+            <VideoTileWithBackground
               stream={localStream}
               username={username}
               isLocal
@@ -239,8 +241,8 @@ export function VideoGrid({
         getGridClass(),
         totalParticipants === 1 && 'max-w-2xl mx-auto'
       )}>
-        {/* Local video */}
-        <VideoTile
+        {/* Local video - uses VideoTileWithBackground for virtual backgrounds */}
+        <VideoTileWithBackground
           stream={localStream}
           username={username}
           isLocal
@@ -248,7 +250,7 @@ export function VideoGrid({
           isVideoOff={!isVideoEnabled}
         />
 
-        {/* Remote participants */}
+        {/* Remote participants - use regular VideoTile */}
         {remoteArray.map((remote) => {
           const status = getParticipantStatus(remote.socketId);
           return (

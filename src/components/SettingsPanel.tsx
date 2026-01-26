@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Camera, Mic, Volume2, Shield, Sliders, Image, Check } from 'lucide-react';
+import { X, Camera, Mic, Volume2, Shield, Sliders, Check, Sparkles, Upload, Loader2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,13 +12,17 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
+// High quality background images
 const backgroundImages = [
-  { id: 'none', label: 'None', url: null },
-  { id: 'office', label: 'Office', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80' },
-  { id: 'nature', label: 'Nature', url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80' },
-  { id: 'city', label: 'City', url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=80' },
-  { id: 'abstract', label: 'Abstract', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80' },
-  { id: 'minimal', label: 'Minimal', url: 'https://images.unsplash.com/photo-1545239351-cefa43af60f3?w=800&q=80' },
+  { id: 'none', label: 'None', url: null, preview: null },
+  { id: 'blur', label: 'Blur', url: 'blur', preview: null },
+  { id: 'office', label: 'Office', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1280&q=90', preview: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=200&q=60' },
+  { id: 'nature', label: 'Nature', url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1280&q=90', preview: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=200&q=60' },
+  { id: 'beach', label: 'Beach', url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1280&q=90', preview: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&q=60' },
+  { id: 'city', label: 'City', url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1280&q=90', preview: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=200&q=60' },
+  { id: 'abstract', label: 'Abstract', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1280&q=90', preview: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=200&q=60' },
+  { id: 'minimal', label: 'Minimal', url: 'https://images.unsplash.com/photo-1545239351-cefa43af60f3?w=1280&q=90', preview: 'https://images.unsplash.com/photo-1545239351-cefa43af60f3?w=200&q=60' },
+  { id: 'mountain', label: 'Mountain', url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1280&q=90', preview: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60' },
 ];
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
@@ -150,50 +154,88 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 onCheckedChange={(checked) => updateSettings({ mirrorVideo: checked })}
               />
 
-              <SettingSwitch
-                label="Background blur"
-                description="Blur your background"
-                checked={videoSettings.backgroundBlur}
-                onCheckedChange={(checked) => updateSettings({ backgroundBlur: checked, backgroundImage: null })}
-              />
-
-              <div className="space-y-2 pt-2">
-                <Label className="text-xs text-muted-foreground">Virtual Background</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {backgroundImages.map((bg) => (
-                    <button
-                      key={bg.id}
-                      onClick={() => updateSettings({ backgroundImage: bg.url, backgroundBlur: false })}
-                      className={cn(
-                        "relative aspect-video rounded-lg overflow-hidden border-2 transition-all",
-                        videoSettings.backgroundImage === bg.url
-                          ? "border-primary ring-2 ring-primary/20"
-                          : "border-border/50 hover:border-primary/50"
-                      )}
-                      data-testid={`button-background-${bg.id}`}
-                    >
-                      {bg.url ? (
-                        <img
-                          src={bg.url}
-                          alt={bg.label}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-muted flex items-center justify-center">
-                          <X className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                      )}
-                      {videoSettings.backgroundImage === bg.url && (
-                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                          <Check className="w-4 h-4 text-primary" />
-                        </div>
-                      )}
-                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] py-0.5 text-center">
-                        {bg.label}
-                      </span>
-                    </button>
-                  ))}
+              {/* Virtual Background Section */}
+              <div className="space-y-3 pt-3 border-t border-border/30">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <Label className="text-sm font-medium">Virtual Background</Label>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Uses AI-powered person segmentation (requires a moment to load)
+                </p>
+                
+                <div className="grid grid-cols-3 gap-2">
+                  {backgroundImages.map((bg) => {
+                    const isSelected = bg.id === 'blur' 
+                      ? videoSettings.backgroundBlur 
+                      : bg.id === 'none' 
+                        ? !videoSettings.backgroundBlur && !videoSettings.backgroundImage
+                        : videoSettings.backgroundImage === bg.url;
+                    
+                    return (
+                      <button
+                        key={bg.id}
+                        onClick={() => {
+                          if (bg.id === 'none') {
+                            updateSettings({ backgroundBlur: false, backgroundImage: null });
+                          } else if (bg.id === 'blur') {
+                            updateSettings({ backgroundBlur: true, backgroundImage: null });
+                          } else {
+                            updateSettings({ backgroundImage: bg.url, backgroundBlur: false });
+                          }
+                        }}
+                        className={cn(
+                          "relative aspect-video rounded-lg overflow-hidden border-2 transition-all group",
+                          isSelected
+                            ? "border-primary ring-2 ring-primary/30 shadow-lg shadow-primary/20"
+                            : "border-border/50 hover:border-primary/50 hover:shadow-md"
+                        )}
+                        data-testid={`button-background-${bg.id}`}
+                      >
+                        {bg.id === 'none' ? (
+                          <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
+                            <X className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                        ) : bg.id === 'blur' ? (
+                          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center backdrop-blur-sm">
+                            <div className="w-8 h-8 rounded-full bg-primary/30 blur-md" />
+                          </div>
+                        ) : (
+                          <img
+                            src={bg.preview || bg.url || ''}
+                            alt={bg.label}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            loading="lazy"
+                          />
+                        )}
+                        
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                            <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                              <Check className="w-4 h-4 text-primary-foreground" />
+                            </div>
+                          </div>
+                        )}
+                        
+                        <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] py-1 text-center font-medium">
+                          {bg.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                {/* Custom upload placeholder */}
+                <button
+                  className="w-full p-3 rounded-lg border-2 border-dashed border-border/50 hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    // Future: Implement custom image upload
+                    console.log('Custom upload coming soon');
+                  }}
+                >
+                  <Upload className="w-4 h-4" />
+                  <span className="text-xs">Upload custom background</span>
+                </button>
               </div>
             </div>
           </div>
