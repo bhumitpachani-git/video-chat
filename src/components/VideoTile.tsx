@@ -34,7 +34,10 @@ export function VideoTile({
   
   const actualStatus = useParticipantMediaStatus(stream, isLocal);
   
+  // For remote streams, prefer the actual track state over props
+  // Props are only hints - the actual track state is the truth
   const isMuted = propMuted ?? actualStatus.isMuted;
+  // For video, we need to check actual track state first
   const isVideoOff = propVideoOff ?? actualStatus.isVideoOff;
   const isSpeaking = externalIsSpeaking ?? actualStatus.isSpeaking;
   const audioLevel = actualStatus.audioLevel;
@@ -202,17 +205,27 @@ export function VideoTile({
 
   useEffect(() => {
     const videoElement = videoRef.current;
-    if (!videoElement || !stream) {
+    if (!videoElement) {
+      console.log('[VideoTile] No video element');
+      return;
+    }
+    
+    if (!stream) {
+      console.log('[VideoTile] No stream for', username);
       setHasVideo(false);
+      videoElement.srcObject = null;
       return;
     }
 
+    console.log('[VideoTile] Setting stream for', username, 'tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+    
     videoElement.srcObject = stream;
     
     const checkVideoTracks = () => {
       const videoTracks = stream.getVideoTracks();
       const hasActiveVideo = videoTracks.length > 0 && 
         videoTracks.some(track => track.readyState === 'live' && track.enabled);
+      console.log('[VideoTile] Video check for', username, '- hasActiveVideo:', hasActiveVideo, 'tracks:', videoTracks.length);
       setHasVideo(hasActiveVideo);
     };
 
@@ -221,12 +234,15 @@ export function VideoTile({
     const playVideo = async () => {
       try {
         await videoElement.play();
-      } catch {
+        console.log('[VideoTile] Video playing for', username);
+      } catch (err) {
+        console.log('[VideoTile] Play failed, trying muted for', username);
         videoElement.muted = true;
         try {
           await videoElement.play();
+          console.log('[VideoTile] Video playing (muted) for', username);
         } catch (e) {
-          console.error('Video play error:', e);
+          console.error('[VideoTile] Video play error for', username, ':', e);
         }
       }
     };
@@ -249,19 +265,24 @@ export function VideoTile({
         track.removeEventListener('unmute', checkVideoTracks);
       });
     };
-  }, [stream]);
+  }, [stream, username]);
 
+  // Check actual video track state
   useEffect(() => {
-    if (stream && !isVideoOff) {
+    if (stream) {
       const videoTracks = stream.getVideoTracks();
-      setHasVideo(videoTracks.length > 0 && 
-        videoTracks.some(track => track.readyState === 'live' && track.enabled));
+      const hasActiveVideo = videoTracks.length > 0 && 
+        videoTracks.some(track => track.readyState === 'live' && track.enabled);
+      console.log('[VideoTile] Track state check for', username, '- hasActiveVideo:', hasActiveVideo);
+      setHasVideo(hasActiveVideo);
     } else {
       setHasVideo(false);
     }
-  }, [isVideoOff, stream]);
+  }, [isVideoOff, stream, username]);
 
-  const showVideo = stream && hasVideo && !isVideoOff;
+  // Show video if stream exists and has active video tracks
+  // Don't rely solely on isVideoOff prop - check actual track state
+  const showVideo = stream && hasVideo;
   const useCanvasRendering = isLocal && (videoSettings.backgroundBlur || videoSettings.backgroundImage);
 
   const getAvatarColor = () => {
