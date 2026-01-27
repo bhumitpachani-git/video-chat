@@ -10,6 +10,7 @@ const SERVER_URL = `http://${window.location.hostname}:3000`;
 export interface Peer {
   socketId: string;
   username: string;
+  isHost?: boolean;
 }
 
 export interface ProducerInfo {
@@ -132,6 +133,7 @@ export class MediaSoupClient {
   public onNotesUpdated: ((notes: string) => void) | null = null;
   public onNotesPresent: ((data: { socketId: string; username: string; isPresenting: boolean }) => void) | null = null;
   public onHostChanged: ((data: { newHostId: string; username: string }) => void) | null = null;
+  public onForceMute: ((data: { kind: 'audio' | 'video' }) => void) | null = null;
   
   // Initial room state
   private initialWhiteboard: WhiteboardState | null = null;
@@ -300,6 +302,16 @@ export class MediaSoupClient {
       this.socket.on('host-changed', (data: { newHostId: string; username: string }) => {
         console.log('[MediaSoup] 👑 Host changed:', data);
         this.onHostChanged?.(data);
+      });
+
+      this.socket.on('force-mute', (data: { kind: 'audio' | 'video' }) => {
+        console.log('[MediaSoup] 🔇 Force mute received:', data);
+        this.onForceMute?.(data);
+        if (data.kind === 'audio') {
+          this.toggleAudio(false);
+        } else {
+          this.toggleVideo(false);
+        }
       });
 
       setTimeout(() => {
@@ -848,26 +860,36 @@ export class MediaSoupClient {
     this.removeScreenShareStream(socketId);
   }
 
-  toggleVideo(): boolean {
+  toggleVideo(force?: boolean): boolean {
     if (this.localStream) {
       const videoTrack = this.localStream.getVideoTracks()[0];
       if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
+        videoTrack.enabled = force !== undefined ? force : !videoTrack.enabled;
         return videoTrack.enabled;
       }
     }
     return false;
   }
 
-  toggleAudio(): boolean {
+  toggleAudio(force?: boolean): boolean {
     if (this.localStream) {
       const audioTrack = this.localStream.getAudioTracks()[0];
       if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
+        audioTrack.enabled = force !== undefined ? force : !audioTrack.enabled;
         return audioTrack.enabled;
       }
     }
     return false;
+  }
+
+  muteParticipant(targetSocketId: string, kind: 'audio' | 'video'): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.roomId) return reject(new Error('Not connected'));
+      this.socket.emit('mute-participant', { roomId: this.roomId, targetSocketId, kind }, (response: any) => {
+        if (response.error) reject(new Error(response.error));
+        else resolve();
+      });
+    });
   }
 
   async disconnect(): Promise<void> {

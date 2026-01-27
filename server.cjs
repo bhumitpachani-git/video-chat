@@ -100,7 +100,8 @@ io.on('connection', (socket) => {
         transports: new Map(),
         producers: new Map(),
         consumers: new Map(),
-        isHost: room.hostId === socket.id
+        isHost: room.hostId === socket.id,
+        joinedAt: Date.now()
       });
 
       socket.join(roomId);
@@ -136,6 +137,19 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('mute-participant', ({ roomId, targetSocketId, kind }, callback) => {
+    try {
+      const room = rooms.get(roomId);
+      if (!room) throw new Error('Room not found');
+      if (room.hostId !== socket.id) throw new Error('Only host can mute participants');
+
+      io.to(targetSocketId).emit('force-mute', { kind });
+      callback({ success: true });
+    } catch (error) {
+      callback({ error: error.message });
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
     if (currentRoomId && rooms.has(currentRoomId)) {
@@ -150,17 +164,28 @@ io.on('connection', (socket) => {
         if (room.hostId === socket.id) {
           room.hostId = null;
           if (room.peers.size > 0) {
-            // Pick next peer as host
-            const [nextHostId] = room.peers.keys();
-            room.hostId = nextHostId;
-            const nextHost = room.peers.get(nextHostId);
-            nextHost.isHost = true;
+            // Pick the peer who joined first among the remaining peers
+            let oldestPeerId = null;
+            let oldestJoinTime = Infinity;
             
-            io.to(currentRoomId).emit('host-changed', {
-              newHostId: nextHostId,
-              username: nextHost.username
-            });
-            console.log(`Host migrated to ${nextHost.username} (${nextHostId})`);
+            for (const [peerId, p] of room.peers.entries()) {
+              if (p.joinedAt < oldestJoinTime) {
+                oldestJoinTime = p.joinedAt;
+                oldestPeerId = peerId;
+              }
+            }
+            
+            if (oldestPeerId) {
+              room.hostId = oldestPeerId;
+              const nextHost = room.peers.get(oldestPeerId);
+              nextHost.isHost = true;
+              
+              io.to(currentRoomId).emit('host-changed', {
+                newHostId: oldestPeerId,
+                username: nextHost.username
+              });
+              console.log(`Host migrated to ${nextHost.username} (${oldestPeerId}) - oldest participant`);
+            }
           }
         }
 

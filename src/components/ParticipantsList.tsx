@@ -1,18 +1,26 @@
 import React from 'react';
-import { X, Mic, MicOff, Video, VideoOff, Monitor, Volume2 } from 'lucide-react';
+import { X, Mic, MicOff, Video, VideoOff, Monitor, Volume2, Shield, MoreVertical } from 'lucide-react';
 import { RemoteStream, ScreenShareStream } from '@/lib/mediasoup';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface ParticipantsListProps {
   localUsername: string;
   isLocalVideoEnabled: boolean;
   isLocalAudioEnabled: boolean;
   isLocalScreenSharing: boolean;
+  isHost: boolean;
   remoteStreams: Map<string, RemoteStream>;
   screenShareStreams: Map<string, ScreenShareStream>;
   onClose: () => void;
+  onMuteParticipant?: (socketId: string, kind: 'audio' | 'video') => void;
 }
 
 export function ParticipantsList({
@@ -20,9 +28,11 @@ export function ParticipantsList({
   isLocalVideoEnabled,
   isLocalAudioEnabled,
   isLocalScreenSharing,
+  isHost,
   remoteStreams,
   screenShareStreams,
   onClose,
+  onMuteParticipant,
 }: ParticipantsListProps) {
   // Get actual status from streams
   const getRemoteStatus = (stream: RemoteStream) => {
@@ -40,6 +50,7 @@ export function ParticipantsList({
       id: 'local',
       username: localUsername,
       isYou: true,
+      isHost: isHost,
       isVideoEnabled: isLocalVideoEnabled,
       isAudioEnabled: isLocalAudioEnabled,
       isScreenSharing: isLocalScreenSharing,
@@ -50,6 +61,7 @@ export function ParticipantsList({
         id: stream.socketId,
         username: stream.username,
         isYou: false,
+        isHost: false, // We'd need to sync this from server properly for remote peers
         isVideoEnabled: status.isVideoEnabled,
         isAudioEnabled: status.isAudioEnabled,
         isScreenSharing: screenShareStreams.has(stream.socketId),
@@ -119,6 +131,9 @@ export function ParticipantsList({
                       You
                     </span>
                   )}
+                  {participant.isHost && (
+                    <Shield className="w-3.5 h-3.5 text-yellow-500" title="Host" />
+                  )}
                 </p>
                 {participant.isScreenSharing && (
                   <p className="text-xs text-primary flex items-center gap-1 mt-0.5">
@@ -127,6 +142,33 @@ export function ParticipantsList({
                   </p>
                 )}
               </div>
+
+              {/* Actions for Host */}
+              {isHost && !participant.isYou && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem 
+                      className="gap-2 cursor-pointer"
+                      onClick={() => onMuteParticipant?.(participant.id, 'audio')}
+                    >
+                      <MicOff className="w-4 h-4" />
+                      Mute Audio
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                      onClick={() => onMuteParticipant?.(participant.id, 'video')}
+                    >
+                      <VideoOff className="w-4 h-4" />
+                      Stop Video
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
               {/* Status icons */}
               <div className="flex items-center gap-1.5">
