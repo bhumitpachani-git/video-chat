@@ -61,7 +61,7 @@ export function ParticipantsList({
         id: stream.socketId,
         username: stream.username,
         isYou: false,
-        isHost: false, // We'd need to sync this from server properly for remote peers
+        isHost: stream.isHost,
         isVideoEnabled: status.isVideoEnabled,
         isAudioEnabled: status.isAudioEnabled,
         isScreenSharing: screenShareStreams.has(stream.socketId),

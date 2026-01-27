@@ -26,6 +26,7 @@ export interface RemoteStream {
   videoConsumer?: Consumer;
   audioConsumer?: Consumer;
   isScreenShare?: boolean;
+  isHost?: boolean;
 }
 
 export interface ScreenShareStream {
@@ -134,6 +135,8 @@ export class MediaSoupClient {
   public onNotesPresent: ((data: { socketId: string; username: string; isPresenting: boolean }) => void) | null = null;
   public onHostChanged: ((data: { newHostId: string; username: string }) => void) | null = null;
   public onForceMute: ((data: { kind: 'audio' | 'video' }) => void) | null = null;
+
+  private isHostFlag: boolean = false;
   
   // Initial room state
   private initialWhiteboard: WhiteboardState | null = null;
@@ -197,10 +200,10 @@ export class MediaSoupClient {
       });
 
       // Handle user joined
-      this.socket.on('user-joined', ({ socketId, username }: Peer) => {
-        console.log(`[MediaSoup] 👤 User joined: ${username} (${socketId})`);
+      this.socket.on('user-joined', ({ socketId, username, isHost }: Peer) => {
+        console.log(`[MediaSoup] 👤 User joined: ${username} (${socketId}), isHost: ${isHost}`);
         this.peerUsernames.set(socketId, username);
-        this.onPeerJoined?.({ socketId, username });
+        this.onPeerJoined?.({ socketId, username, isHost });
       });
 
       // Handle user left
@@ -322,6 +325,20 @@ export class MediaSoupClient {
     });
   }
 
+  public getSocketId(): string | undefined {
+    return this.socket?.id;
+  }
+
+  public async muteParticipant(targetSocketId: string, kind: 'audio' | 'video'): Promise<void> {
+    if (!this.socket) throw new Error('Not connected');
+    return new Promise((resolve, reject) => {
+      this.socket!.emit('mute-participant', { roomId: this.roomId, targetSocketId, kind }, (response: any) => {
+        if (response.error) reject(new Error(response.error));
+        else resolve();
+      });
+    });
+  }
+
   async joinRoom(roomId: string, username: string, password?: string): Promise<Peer[]> {
     if (!this.socket) throw new Error('Not connected');
 
@@ -352,6 +369,11 @@ export class MediaSoupClient {
           await this.device.load({ routerRtpCapabilities: response.rtpCapabilities });
           console.log('[MediaSoup] ✅ Device loaded with RTP capabilities');
           
+          if (response.isHost) {
+            this.isHostFlag = true;
+            this.onHostChanged?.({ newHostId: this.socket!.id!, username: this.username });
+          }
+
           // Store and emit initial room state
           if (response.whiteboard) {
             console.log('[MediaSoup] 🎨 Initial whiteboard state:', response.whiteboard.strokes?.length || 0, 'strokes');

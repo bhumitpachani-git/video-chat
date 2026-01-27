@@ -29,6 +29,8 @@ const Index = () => {
     sharedNotes,
     presentingState,
     activePoll,
+    isHost,
+    muteParticipant,
     joinRoom,
     leaveRoom,
     toggleVideo,
@@ -82,6 +84,8 @@ const Index = () => {
         presentingState={presentingState}
         activePoll={activePoll}
         votedPolls={votedPolls}
+        isHost={isHost}
+        onMuteParticipant={muteParticipant}
         onToggleVideo={toggleVideo}
         onToggleAudio={toggleAudio}
         onToggleScreenShare={toggleScreenShare}

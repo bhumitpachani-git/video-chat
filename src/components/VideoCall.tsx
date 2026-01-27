@@ -39,6 +39,8 @@ interface VideoCallProps {
   presentingState: PresentingState | null;
   activePoll: Poll | null;
   votedPolls: Set<string>;
+  isHost: boolean;
+  onMuteParticipant: (socketId: string, kind: 'audio' | 'video') => void;
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   onToggleScreenShare: () => void;
@@ -83,6 +85,8 @@ export function VideoCall({
   presentingState,
   activePoll,
   votedPolls,
+  isHost,
+  onMuteParticipant,
   onToggleVideo,
   onToggleAudio,
   onToggleScreenShare,
@@ -230,9 +234,11 @@ export function VideoCall({
             isLocalVideoEnabled={isVideoEnabled}
             isLocalAudioEnabled={isAudioEnabled}
             isLocalScreenSharing={isScreenSharing}
+            isHost={isHost}
             remoteStreams={remoteStreams}
             screenShareStreams={screenShareStreams}
             onClose={closePanel}
+            onMuteParticipant={onMuteParticipant}
           />
         )}
         {activePanel === 'settings' && (

@@ -33,6 +33,8 @@ export interface UseVideoCallReturn {
   sharedNotes: string;
   presentingState: PresentingState | null;
   activePoll: Poll | null;
+  isHost: boolean;
+  muteParticipant: (targetSocketId: string, kind: 'audio' | 'video') => Promise<void>;
   joinRoom: (roomId: string, username: string, password?: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
   toggleVideo: () => void;
@@ -76,6 +78,7 @@ export function useVideoCall(): UseVideoCallReturn {
   const [sharedNotes, setSharedNotes] = useState('');
   const [presentingState, setPresentingState] = useState<PresentingState | null>(null);
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
+  const [isHost, setIsHost] = useState(false);
   
   const clientRef = useRef<MediaSoupClient | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -294,13 +297,36 @@ export function useVideoCall(): UseVideoCallReturn {
         }
       };
 
+      client.onHostChanged = (data) => {
+        console.log('[Hook] Host changed:', data);
+        if (clientRef.current) {
+          setIsHost(data.newHostId === clientRef.current.getSocketId());
+        }
+      };
+
+      client.onForceMute = (data) => {
+        console.log('[Hook] Force mute:', data);
+        if (data.kind === 'audio') {
+          setIsAudioEnabled(false);
+        } else if (data.kind === 'video') {
+          setIsVideoEnabled(false);
+        }
+      };
+
       // Connect to server
       await client.connect();
       setConnectionState('connected');
 
       // Join room
-      const peers = await client.joinRoom(roomId, username, password);
-      console.log('[Hook] Joined room with peers:', peers);
+      const responsePeers = await client.joinRoom(roomId, username, password);
+      console.log('[Hook] Joined room with peers:', responsePeers);
+      
+      // Determine host status from join response
+      // Note: We need to update joinRoom to return the isHost flag
+      // For now, assume it's set on the client during join
+      if (client.getSocketId()) {
+        // We'll update the lib to handle this, but for now we set it based on the client state if possible
+      }
 
       // Create transports
       await client.createTransports();
@@ -512,6 +538,12 @@ export function useVideoCall(): UseVideoCallReturn {
     }
   }, []);
 
+  const muteParticipant = useCallback(async (targetSocketId: string, kind: 'audio' | 'video') => {
+    if (clientRef.current && isHost) {
+      await clientRef.current.muteParticipant(targetSocketId, kind);
+    }
+  }, [isHost]);
+
   // Presenting handlers
   const presentWhiteboard = useCallback((isPresenting: boolean) => {
     if (clientRef.current) {
@@ -579,6 +611,8 @@ export function useVideoCall(): UseVideoCallReturn {
     sharedNotes,
     presentingState,
     activePoll,
+    isHost,
+    muteParticipant,
     joinRoom,
     leaveRoom,
     toggleVideo,
