@@ -132,7 +132,9 @@ export function VideoCall({
     }
   };
 
-  const closePanel = () => setActivePanel(null);
+  const closePanel = () => {
+    setActivePanel(null);
+  };
 
   const [recipient, setRecipient] = useState<{ socketId: string; username: string } | null>(null);
 

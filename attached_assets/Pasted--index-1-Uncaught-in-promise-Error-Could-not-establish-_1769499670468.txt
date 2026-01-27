@@ -1,0 +1,46 @@
+(index):1 Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.Understand this error
+2VideoCall.tsx:242 Uncaught ReferenceError: closePanel is not defined
+    at VideoCall (VideoCall.tsx:242:22)
+    at renderWithHooks (chunk-T2SWDQEL.js?v=299251e2:11548:26)
+    at updateFunctionComponent (chunk-T2SWDQEL.js?v=299251e2:14582:28)
+    at beginWork (chunk-T2SWDQEL.js?v=299251e2:15924:22)
+    at HTMLUnknownElement.callCallback2 (chunk-T2SWDQEL.js?v=299251e2:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-T2SWDQEL.js?v=299251e2:3699:24)
+    at invokeGuardedCallback (chunk-T2SWDQEL.js?v=299251e2:3733:39)
+    at beginWork$1 (chunk-T2SWDQEL.js?v=299251e2:19765:15)
+    at performUnitOfWork (chunk-T2SWDQEL.js?v=299251e2:19198:20)
+    at workLoopSync (chunk-T2SWDQEL.js?v=299251e2:19137:13)Understand this error
+chunk-T2SWDQEL.js?v=299251e2:14032 The above error occurred in the <VideoCall> component:
+
+    at VideoCall (http://localhost:5001/src/components/VideoCall.tsx:36:29)
+    at Index (http://localhost:5001/src/pages/Index.tsx?t=1769499190925:28:41)
+    at RenderedRoute (http://localhost:5001/node_modules/.vite/deps/react-router-dom.js?v=e32fbe04:4088:5)
+    at Routes (http://localhost:5001/node_modules/.vite/deps/react-router-dom.js?v=e32fbe04:4558:5)
+    at Router (http://localhost:5001/node_modules/.vite/deps/react-router-dom.js?v=e32fbe04:4501:15)
+    at BrowserRouter (http://localhost:5001/node_modules/.vite/deps/react-router-dom.js?v=e32fbe04:5247:5)
+    at VideoSettingsProvider (http://localhost:5001/src/contexts/VideoSettingsContext.tsx:29:41)
+    at Provider (http://localhost:5001/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=299251e2:38:15)
+    at TooltipProvider (http://localhost:5001/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=b4fa8f29:64:5)
+    at QueryClientProvider (http://localhost:5001/node_modules/.vite/deps/@tanstack_react-query.js?v=a4173316:2934:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+logCapturedError @ chunk-T2SWDQEL.js?v=299251e2:14032Understand this error
+chunk-T2SWDQEL.js?v=299251e2:9129 Uncaught ReferenceError: closePanel is not defined
+    at VideoCall (VideoCall.tsx:242:22)
+    at renderWithHooks (chunk-T2SWDQEL.js?v=299251e2:11548:26)
+    at updateFunctionComponent (chunk-T2SWDQEL.js?v=299251e2:14582:28)
+    at beginWork (chunk-T2SWDQEL.js?v=299251e2:15924:22)
+    at beginWork$1 (chunk-T2SWDQEL.js?v=299251e2:19753:22)
+    at performUnitOfWork (chunk-T2SWDQEL.js?v=299251e2:19198:20)
+    at workLoopSync (chunk-T2SWDQEL.js?v=299251e2:19137:13)
+    at renderRootSync (chunk-T2SWDQEL.js?v=299251e2:19116:15)
+    at recoverFromConcurrentError (chunk-T2SWDQEL.js?v=299251e2:18736:28)
+    at performSyncWorkOnRoot (chunk-T2SWDQEL.js?v=299251e2:18879:28)Understand this error
+mediasoup.ts:914 [MediaSoup] Disconnecting...
+mediasoup.ts:663 [MediaSoup] Screen share stopped
+useVideoCall.ts:146 [Hook] Screen share changed: false
+useVirtualBackground.ts:258 [VirtualBackground] Processing stopped
+mediasoup.ts:171 [MediaSoup] Disconnected: io client disconnect
+useVideoCall.ts:133 [Hook] Connection state: disconnected

@@ -5,7 +5,8 @@ type Transport = types.Transport;
 type Producer = types.Producer;
 type Consumer = types.Consumer;
 
-const SERVER_URL = `http://${window.location.hostname}:3000`;
+// Use your EC2 IP address here
+const SERVER_URL = `http://192.168.1.7:3000`; 
 
 export interface Peer {
   socketId: string;
@@ -205,6 +206,8 @@ export class MediaSoupClient {
         console.log(`[MediaSoup] 👤 User joined: ${username} (${socketId}), isHost: ${isHost}`);
         this.peerUsernames.set(socketId, username);
         this.onPeerJoined?.({ socketId, username, isHost });
+        // Force remote stream map update to refresh participants list
+        this.onRemoteStream?.(new Map(this.remoteStreams));
       });
 
       // Handle user left
