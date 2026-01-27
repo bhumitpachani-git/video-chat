@@ -197,8 +197,35 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Basic Mediasoup events would go here (createTransport, connectTransport, produce, consume, etc.)
-  // I'm focusing on the password and host logic requested.
+  socket.on('send-chat-message', ({ roomId, message, toSocketId }) => {
+    try {
+      const room = rooms.get(roomId);
+      if (!room) return;
+
+      const peer = room.peers.get(socket.id);
+      if (!peer) return;
+
+      const chatMsg = {
+        id: Math.random().toString(36).substr(2, 9),
+        socketId: socket.id,
+        username: peer.username,
+        message,
+        timestamp: Date.now(),
+        toSocketId // null for public, socketId for private
+      };
+
+      if (toSocketId) {
+        // Private message
+        io.to(toSocketId).emit('chat-message', chatMsg);
+        socket.emit('chat-message', chatMsg); // Send back to sender
+      } else {
+        // Public message
+        io.to(roomId).emit('chat-message', chatMsg);
+      }
+    } catch (error) {
+      console.error('Error sending chat message:', error);
+    }
+  });
 });
 
 createWorker().then(() => {

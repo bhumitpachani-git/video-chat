@@ -42,6 +42,7 @@ export interface ChatMessage {
   username: string;
   message: string;
   timestamp: number;
+  toSocketId?: string;
 }
 
 export interface Poll {
@@ -667,7 +668,7 @@ export class MediaSoupClient {
     return this.screenProducer !== null && !this.screenProducer.closed;
   }
 
-  async sendChatMessage(message: string): Promise<void> {
+  async sendChatMessage(message: string, toSocketId?: string): Promise<void> {
     if (!this.socket || !this.roomId) return;
     
     const chatMessage: ChatMessage = {
@@ -675,12 +676,16 @@ export class MediaSoupClient {
       socketId: this.socket.id!,
       username: this.username,
       message,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      toSocketId
     };
     
-    this.socket.emit('chat-message', { roomId: this.roomId, ...chatMessage });
-    // Also trigger local callback
-    this.onChatMessage?.(chatMessage);
+    this.socket.emit('send-chat-message', { roomId: this.roomId, message, toSocketId });
+    
+    // If it's a private message, the server will send it back to us, but for 
+    // public messages we might need to handle the display. 
+    // Actually, server sends back to sender for private, and emits to room for public.
+    // So we don't need to manually trigger onChatMessage here if server handles it.
   }
 
   async consumeExistingProducers(): Promise<void> {

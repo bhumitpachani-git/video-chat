@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Mic, MicOff, Video, VideoOff, Monitor, Volume2, Shield, MoreVertical } from 'lucide-react';
+import { X, Mic, MicOff, Video, VideoOff, Monitor, Volume2, Shield, MoreVertical, MessageSquare } from 'lucide-react';
 import { RemoteStream, ScreenShareStream } from '@/lib/mediasoup';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,7 @@ interface ParticipantsListProps {
   screenShareStreams: Map<string, ScreenShareStream>;
   onClose: () => void;
   onMuteParticipant?: (socketId: string, kind: 'audio' | 'video') => void;
+  onPrivateMessage?: (socketId: string, username: string) => void;
 }
 
 export function ParticipantsList({
@@ -33,6 +34,7 @@ export function ParticipantsList({
   screenShareStreams,
   onClose,
   onMuteParticipant,
+  onPrivateMessage,
 }: ParticipantsListProps) {
   // Get actual status from streams
   const getRemoteStatus = (stream: RemoteStream) => {
@@ -152,6 +154,13 @@ export function ParticipantsList({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem 
+                      className="gap-2 cursor-pointer"
+                      onClick={() => onPrivateMessage?.(participant.id, participant.username)}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Message
+                    </DropdownMenuItem>
                     <DropdownMenuItem 
                       className="gap-2 cursor-pointer"
                       onClick={() => onMuteParticipant?.(participant.id, 'audio')}

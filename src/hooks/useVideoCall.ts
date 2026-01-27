@@ -43,7 +43,7 @@ export interface UseVideoCallReturn {
   toggleRecording: () => void;
   toggleTranscription: () => void;
   setSelectedLanguage: (language: string) => void;
-  sendChatMessage: (message: string) => Promise<void>;
+  sendChatMessage: (message: string, toSocketId?: string) => Promise<void>;
   createPoll: (question: string, options: string[], isAnonymous: boolean, allowMultiple: boolean) => void;
   submitVote: (pollId: string, selectedOptions: number[]) => void;
   closePoll: (pollId: string) => void;
@@ -482,9 +482,9 @@ export function useVideoCall(): UseVideoCallReturn {
     }
   }, [isRecording]);
 
-  const sendChatMessage = useCallback(async (message: string) => {
+  const sendChatMessage = useCallback(async (message: string, toSocketId?: string) => {
     if (clientRef.current && message.trim()) {
-      await clientRef.current.sendChatMessage(message.trim());
+      await clientRef.current.sendChatMessage(message.trim(), toSocketId);
     }
   }, []);
 
@@ -632,5 +632,7 @@ export function useVideoCall(): UseVideoCallReturn {
     presentWhiteboard,
     presentNotes,
     stopPresenting,
+    isHost,
+    muteParticipant,
   };
 }

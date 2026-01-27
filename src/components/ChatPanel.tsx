@@ -9,13 +9,29 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 interface ChatPanelProps {
   messages: ChatMessage[];
   currentSocketId?: string;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, toSocketId?: string) => void;
   onClose: () => void;
+  initialRecipient?: { socketId: string; username: string } | null;
+  onClearRecipient?: () => void;
 }
 
-export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }: ChatPanelProps) {
+export function ChatPanel({ 
+  messages, 
+  currentSocketId, 
+  onSendMessage, 
+  onClose,
+  initialRecipient,
+  onClearRecipient
+}: ChatPanelProps) {
   const [newMessage, setNewMessage] = useState('');
+  const [recipient, setRecipient] = useState<{ socketId: string; username: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (initialRecipient) {
+      setRecipient(initialRecipient);
+    }
+  }, [initialRecipient]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -23,8 +39,12 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
 
   const handleSend = () => {
     if (newMessage.trim()) {
-      onSendMessage(newMessage);
+      onSendMessage(newMessage, recipient?.socketId);
       setNewMessage('');
+      if (recipient) {
+        setRecipient(null);
+        onClearRecipient?.();
+      }
     }
   };
 
@@ -71,6 +91,25 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
 
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
+        {recipient && (
+          <div className="mb-4 p-2 bg-primary/10 rounded-lg flex items-center justify-between border border-primary/20">
+            <span className="text-xs font-medium text-primary flex items-center gap-2">
+              <MessageCircle className="w-3 h-3" />
+              Private message to: {recipient.username}
+            </span>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-5 w-5 rounded-full hover:bg-primary/20"
+              onClick={() => {
+                setRecipient(null);
+                onClearRecipient?.();
+              }}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-12">
             <div className="w-16 h-16 rounded-2xl bg-muted/30 backdrop-blur-sm flex items-center justify-center mb-4 border border-border/30">
@@ -119,9 +158,15 @@ export function ChatPanel({ messages, currentSocketId, onSendMessage, onClose }:
                         'px-4 py-2.5 rounded-2xl text-sm shadow-lg backdrop-blur-sm',
                         isOwn
                           ? 'bg-primary text-primary-foreground rounded-br-md'
-                          : 'bg-secondary/80 text-secondary-foreground rounded-bl-md border border-border/30'
+                          : 'bg-secondary/80 text-secondary-foreground rounded-bl-md border border-border/30',
+                        msg.toSocketId && 'ring-2 ring-primary/50'
                       )}
                     >
+                      {msg.toSocketId && (
+                        <div className="text-[9px] font-bold uppercase tracking-wider mb-1 opacity-70">
+                          {isOwn ? `To ${messages.find(m => m.socketId === msg.toSocketId)?.username || 'User'}` : 'Private Message'}
+                        </div>
+                      )}
                       {msg.message}
                     </div>
                     <span className="text-[10px] text-muted-foreground mt-1 mx-1">

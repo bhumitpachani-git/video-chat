@@ -41,13 +41,8 @@ interface VideoCallProps {
   votedPolls: Set<string>;
   isHost: boolean;
   onMuteParticipant: (socketId: string, kind: 'audio' | 'video') => void;
+  onSendMessage: (message: string, toSocketId?: string) => void;
   onToggleVideo: () => void;
-  onToggleAudio: () => void;
-  onToggleScreenShare: () => void;
-  onToggleRecording: () => void;
-  onToggleTranscription: () => void;
-  onLanguageChange: (language: string) => void;
-  onSendMessage: (message: string) => void;
   onLeaveCall: () => void;
   onCreatePoll: (question: string, options: string[], isAnonymous: boolean, allowMultiple: boolean) => void;
   onVote: (pollId: string, selectedOptions: number[]) => void;
@@ -132,7 +127,12 @@ export function VideoCall({
     }
   };
 
-  const closePanel = () => setActivePanel(null);
+  const [recipient, setRecipient] = useState<{ socketId: string; username: string } | null>(null);
+
+  const handlePrivateMessage = (socketId: string, username: string) => {
+    setRecipient({ socketId, username });
+    setActivePanel('chat');
+  };
 
   const handleToggleWhiteboard = () => {
     if (presentingState?.type === 'whiteboard' && isPresenter) {
@@ -216,6 +216,8 @@ export function VideoCall({
             currentSocketId={socketId}
             onSendMessage={onSendMessage}
             onClose={closePanel}
+            initialRecipient={recipient}
+            onClearRecipient={() => setRecipient(null)}
           />
         )}
         {activePanel === 'transcription' && (
@@ -239,6 +241,7 @@ export function VideoCall({
             screenShareStreams={screenShareStreams}
             onClose={closePanel}
             onMuteParticipant={onMuteParticipant}
+            onPrivateMessage={handlePrivateMessage}
           />
         )}
         {activePanel === 'settings' && (
