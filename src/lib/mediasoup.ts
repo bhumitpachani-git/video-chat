@@ -671,21 +671,8 @@ export class MediaSoupClient {
   async sendChatMessage(message: string, toSocketId?: string): Promise<void> {
     if (!this.socket || !this.roomId) return;
     
-    const chatMessage: ChatMessage = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      socketId: this.socket.id!,
-      username: this.username,
-      message,
-      timestamp: Date.now(),
-      toSocketId
-    };
-    
+    // Server expects 'send-chat-message' for routing
     this.socket.emit('send-chat-message', { roomId: this.roomId, message, toSocketId });
-    
-    // If it's a private message, the server will send it back to us, but for 
-    // public messages we might need to handle the display. 
-    // Actually, server sends back to sender for private, and emits to room for public.
-    // So we don't need to manually trigger onChatMessage here if server handles it.
   }
 
   async consumeExistingProducers(): Promise<void> {
@@ -981,12 +968,13 @@ export class MediaSoupClient {
   }
 
   // Transcription methods
-  startTranscription(targetLanguage: string): void {
+  startTranscription(targetLanguage: string, speakingLanguage: string = 'auto'): void {
     if (this.socket) {
       this.socket.emit('start-transcription', { 
         roomId: this.roomId, 
         username: this.username,
-        targetLanguage 
+        targetLanguage,
+        speakingLanguage
       });
     }
   }

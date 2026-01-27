@@ -632,7 +632,5 @@ export function useVideoCall(): UseVideoCallReturn {
     presentWhiteboard,
     presentNotes,
     stopPresenting,
-    isHost,
-    muteParticipant,
   };
 }
