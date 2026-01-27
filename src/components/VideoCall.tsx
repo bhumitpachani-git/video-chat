@@ -43,6 +43,11 @@ interface VideoCallProps {
   onMuteParticipant: (socketId: string, kind: 'audio' | 'video') => void;
   onSendMessage: (message: string, toSocketId?: string) => void;
   onToggleVideo: () => void;
+  onToggleAudio: () => void;
+  onToggleScreenShare: () => void;
+  onToggleRecording: () => void;
+  onToggleTranscription: () => void;
+  onLanguageChange: (language: string) => void;
   onLeaveCall: () => void;
   onCreatePoll: (question: string, options: string[], isAnonymous: boolean, allowMultiple: boolean) => void;
   onVote: (pollId: string, selectedOptions: number[]) => void;
