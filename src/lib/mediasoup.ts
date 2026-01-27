@@ -5,8 +5,7 @@ type Transport = types.Transport;
 type Producer = types.Producer;
 type Consumer = types.Consumer;
 
-// Use your EC2 IP address here
-const SERVER_URL = `http://192.168.1.7:3000`; 
+const SERVER_URL = `http://192.168.1.7:3000`; // Use your EC2 IP address
 
 export interface Peer {
   socketId: string;

@@ -92,7 +92,7 @@ io.on('connection', (socket) => {
       // Assign host if none exists
       if (!room.hostId) {
         room.hostId = socket.id;
-        console.log(`User ${username} (${socket.id}) is now host of room ${roomId}`);
+        console.log(`[Host] User ${username} (${socket.id}) is now host of room ${roomId}`);
       }
 
       const isUserHost = room.hostId === socket.id;
@@ -123,9 +123,11 @@ io.on('connection', (socket) => {
         peers: existingPeers,
         whiteboard: room.whiteboard,
         notes: room.notes,
+        polls: Array.from(room.polls.values()),
         isHost: isUserHost
       });
 
+      // Crucially, broadcast to others that this new user joined with correct host status
       socket.to(roomId).emit('user-joined', {
         socketId: socket.id,
         username,
