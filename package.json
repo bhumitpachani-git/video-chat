@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start:server": "node server.js"
+    "start:server": "node server.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-transcribe-streaming": "^3.974.0",

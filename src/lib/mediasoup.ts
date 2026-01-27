@@ -5,7 +5,7 @@ type Transport = types.Transport;
 type Producer = types.Producer;
 type Consumer = types.Consumer;
 
-const SERVER_URL = 'https://video-server-2261.onrender.com';
+const SERVER_URL = `http://${window.location.hostname}:3000`;
 
 export interface Peer {
   socketId: string;
@@ -131,6 +131,7 @@ export class MediaSoupClient {
   // Notes callbacks
   public onNotesUpdated: ((notes: string) => void) | null = null;
   public onNotesPresent: ((data: { socketId: string; username: string; isPresenting: boolean }) => void) | null = null;
+  public onHostChanged: ((data: { newHostId: string; username: string }) => void) | null = null;
   
   // Initial room state
   private initialWhiteboard: WhiteboardState | null = null;
@@ -296,6 +297,11 @@ export class MediaSoupClient {
         this.onNotesPresent?.(data);
       });
 
+      this.socket.on('host-changed', (data: { newHostId: string; username: string }) => {
+        console.log('[MediaSoup] 👑 Host changed:', data);
+        this.onHostChanged?.(data);
+      });
+
       setTimeout(() => {
         if (!this.socket?.connected) {
           reject(new Error('Connection timeout'));
@@ -304,7 +310,7 @@ export class MediaSoupClient {
     });
   }
 
-  async joinRoom(roomId: string, username: string): Promise<Peer[]> {
+  async joinRoom(roomId: string, username: string, password?: string): Promise<Peer[]> {
     if (!this.socket) throw new Error('Not connected');
 
     this.roomId = roomId;
@@ -313,7 +319,7 @@ export class MediaSoupClient {
     return new Promise((resolve, reject) => {
       console.log(`[MediaSoup] Joining room: ${roomId} as ${username}`);
       
-      this.socket!.emit('join-room', { roomId, username }, async (response: any) => {
+      this.socket!.emit('join-room', { roomId, username, password }, async (response: any) => {
         if (response.error) {
           console.error('[MediaSoup] Error joining room:', response.error);
           reject(new Error(response.error));

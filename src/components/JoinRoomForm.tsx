@@ -5,7 +5,7 @@ import { Video, Users, Sparkles, ArrowRight, Loader2, Shield, Globe, Mic } from 
 import { cn } from '@/lib/utils';
 
 interface JoinRoomFormProps {
-  onJoin: (roomId: string, username: string) => Promise<void>;
+  onJoin: (roomId: string, username: string, password?: string) => Promise<void>;
   isLoading: boolean;
   error: string | null;
 }
@@ -13,6 +13,7 @@ interface JoinRoomFormProps {
 export function JoinRoomForm({ onJoin, isLoading, error }: JoinRoomFormProps) {
   const [roomId, setRoomId] = useState('');
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
 
   const generateRoomId = () => {
     const id = 'room-' + Math.random().toString(36).substr(2, 9);
@@ -31,7 +32,7 @@ export function JoinRoomForm({ onJoin, isLoading, error }: JoinRoomFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomId.trim() || !username.trim()) return;
-    await onJoin(roomId.trim(), username.trim());
+    await onJoin(roomId.trim(), username.trim(), password.trim() || undefined);
   };
 
   const features = [
@@ -138,6 +139,26 @@ export function JoinRoomForm({ onJoin, isLoading, error }: JoinRoomFormProps) {
                   <Sparkles className="w-5 h-5" />
                 </Button>
               </div>
+            </div>
+
+            {/* Password (Optional) */}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-primary/20 flex items-center justify-center">
+                  <Shield className="w-3.5 h-3.5 text-primary" />
+                </div>
+                Room Password (Optional)
+              </label>
+              <Input
+                type="password"
+                placeholder="Set or enter room password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-12 rounded-xl bg-background/80 border-border/50 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base"
+              />
+              <p className="text-[10px] text-muted-foreground ml-1">
+                Required for joining if already set by creator
+              </p>
             </div>
 
             {/* Error message */}

@@ -33,7 +33,7 @@ export interface UseVideoCallReturn {
   sharedNotes: string;
   presentingState: PresentingState | null;
   activePoll: Poll | null;
-  joinRoom: (roomId: string, username: string) => Promise<void>;
+  joinRoom: (roomId: string, username: string, password?: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
   toggleVideo: () => void;
   toggleAudio: () => void;
@@ -90,7 +90,7 @@ export function useVideoCall(): UseVideoCallReturn {
     };
   }, []);
 
-  const joinRoom = useCallback(async (roomId: string, username: string) => {
+  const joinRoom = useCallback(async (roomId: string, username: string, password?: string) => {
     try {
       setError(null);
       setConnectionState('connecting');
@@ -299,7 +299,7 @@ export function useVideoCall(): UseVideoCallReturn {
       setConnectionState('connected');
 
       // Join room
-      const peers = await client.joinRoom(roomId, username);
+      const peers = await client.joinRoom(roomId, username, password);
       console.log('[Hook] Joined room with peers:', peers);
 
       // Create transports
