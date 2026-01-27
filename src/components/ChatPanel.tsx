@@ -41,10 +41,7 @@ export function ChatPanel({
     if (newMessage.trim()) {
       onSendMessage(newMessage, recipient?.socketId);
       setNewMessage('');
-      if (recipient) {
-        setRecipient(null);
-        onClearRecipient?.();
-      }
+      // Don't clear recipient here, let the user manually clear it or it clears on close
     }
   };
 

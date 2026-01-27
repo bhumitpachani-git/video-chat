@@ -95,12 +95,13 @@ io.on('connection', (socket) => {
         console.log(`User ${username} (${socket.id}) is now host of room ${roomId}`);
       }
 
+      const isUserHost = room.hostId === socket.id;
       room.peers.set(socket.id, {
         username,
         transports: new Map(),
         producers: new Map(),
         consumers: new Map(),
-        isHost: room.hostId === socket.id,
+        isHost: isUserHost,
         joinedAt: Date.now()
       });
 
@@ -122,13 +123,13 @@ io.on('connection', (socket) => {
         peers: existingPeers,
         whiteboard: room.whiteboard,
         notes: room.notes,
-        isHost: room.hostId === socket.id
+        isHost: isUserHost
       });
 
       socket.to(roomId).emit('user-joined', {
         socketId: socket.id,
         username,
-        isHost: room.hostId === socket.id
+        isHost: isUserHost
       });
 
     } catch (error) {
