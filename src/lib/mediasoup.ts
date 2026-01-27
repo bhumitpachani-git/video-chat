@@ -172,26 +172,30 @@ export class MediaSoupClient {
         this.onConnectionStateChange?.('disconnected');
       });
 
-      // Handle new producer from other peers
-      this.socket.on('new-producer', async ({ socketId, producerId, kind, isScreenShare }: ProducerInfoWithType) => {
-        console.log(`[MediaSoup] 🎬 New producer event: ${producerId} (${kind}) from ${socketId}, isScreenShare: ${isScreenShare}`);
-        
-        if (isScreenShare) {
-          this.screenShareProducerIds.add(producerId);
-        }
-        
-        if (!this.isRecvTransportReady) {
-          console.log('[MediaSoup] Receive transport not ready, queuing producer');
-          this.pendingProducers.push({ socketId, producerId, kind, isScreenShare });
-          return;
-        }
-        
-        try {
-          await this.consumeProducer(socketId, producerId, kind, isScreenShare);
-        } catch (error) {
-          console.error('[MediaSoup] Error consuming new producer:', error);
-        }
-      });
+    // Handle new producer from other peers
+    this.socket.on('new-producer', async ({ socketId, producerId, kind, isScreenShare }: ProducerInfoWithType) => {
+      console.log(`[MediaSoup] 🎬 New producer event: ${producerId} (${kind}) from ${socketId}, isScreenShare: ${isScreenShare}`);
+      
+      if (isScreenShare) {
+        this.screenShareProducerIds.add(producerId);
+      }
+      
+      if (!this.isRecvTransportReady) {
+        console.log('[MediaSoup] Receive transport not ready, queuing producer');
+        this.pendingProducers.push({ socketId, producerId, kind, isScreenShare });
+        return;
+      }
+      
+      try {
+        await this.consumeProducer(socketId, producerId, kind, isScreenShare);
+        // FORCE UI REFRESH: This ensures the new remote stream is added to the React state
+        setTimeout(() => {
+          this.onRemoteStream?.(new Map(this.remoteStreams));
+        }, 500);
+      } catch (error) {
+        console.error('[MediaSoup] Error consuming new producer:', error);
+      }
+    });
 
       // Handle screen share stopped
       this.socket.on('screen-share-stopped', ({ socketId, producerId }: { socketId: string; producerId: string }) => {
