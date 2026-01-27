@@ -329,16 +329,6 @@ export class MediaSoupClient {
     return this.socket?.id;
   }
 
-  public async muteParticipant(targetSocketId: string, kind: 'audio' | 'video'): Promise<void> {
-    if (!this.socket) throw new Error('Not connected');
-    return new Promise((resolve, reject) => {
-      this.socket!.emit('mute-participant', { roomId: this.roomId, targetSocketId, kind }, (response: any) => {
-        if (response.error) reject(new Error(response.error));
-        else resolve();
-      });
-    });
-  }
-
   async joinRoom(roomId: string, username: string, password?: string): Promise<Peer[]> {
     if (!this.socket) throw new Error('Not connected');
 
@@ -828,7 +818,8 @@ export class MediaSoupClient {
       remoteStream = {
         socketId,
         username: this.peerUsernames.get(socketId) || 'Unknown',
-        stream: new MediaStream()
+        stream: new MediaStream(),
+        isHost: this.peerUsernames.has(socketId) // Placeholder: we should ideally sync this
       };
       this.remoteStreams.set(socketId, remoteStream);
     }
@@ -982,10 +973,6 @@ export class MediaSoupClient {
   
   getScreenShareStreams(): Map<string, ScreenShareStream> {
     return this.screenShareStreams;
-  }
-
-  getSocketId(): string | undefined {
-    return this.socket?.id;
   }
 
   // Transcription methods

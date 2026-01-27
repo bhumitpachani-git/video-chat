@@ -132,7 +132,7 @@ export function ParticipantsList({
                     </span>
                   )}
                   {participant.isHost && (
-                    <Shield className="w-3.5 h-3.5 text-yellow-500" title="Host" />
+                    <Shield className="w-3.5 h-3.5 text-yellow-500" />
                   )}
                 </p>
                 {participant.isScreenSharing && (
