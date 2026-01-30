@@ -1,0 +1,29 @@
+useAdvancedAudioProcessor.ts:229 [MediaStatus] Check for stream - audio: true video: true audioTracks: 1 videoTracks: 1
+6(index):1 Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.Understand this error
+useAdvancedAudioProcessor.ts:229 [MediaStatus] Check for stream - audio: true video: true audioTracks: 1 videoTracks: 1
+8(index):1 Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.Understand this error
+useAdvancedAudioProcessor.ts:229 [MediaStatus] Check for stream - audio: true video: true audioTracks: 1 videoTracks: 1
+5(index):1 Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.Understand this error
+6useAdvancedAudioProcessor.ts:229 [MediaStatus] Check for stream - audio: true video: true audioTracks: 1 videoTracks: 1
+4(index):1 Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.Understand this error
+48useAdvancedAudioProcessor.ts:229 [MediaStatus] Check for stream - audio: true video: true audioTracks: 1 videoTracks: 1
+mediasoup.ts:182 [MediaSoup] 🎬 New producer event: 6f761e5f-3969-40f9-bb47-aacf7818bdaf (video) from p7b6eE-YmNHiSIvmAAAL, isScreenShare: undefined
+mediasoup.ts:771 [MediaSoup] 🔄 Consuming video from p7b6eE-YmNHiSIvmAAAL (producer: 6f761e5f-3969-40f9-bb47-aacf7818bdaf, screenShare: undefined)
+mediasoup.ts:787 [MediaSoup] 📊 Consumer params received: {id: '57f14b5e-7224-4eaa-9069-a213f567f87e', producerId: '6f761e5f-3969-40f9-bb47-aacf7818bdaf', kind: 'video'}
+useAdvancedAudioProcessor.ts:229 [MediaStatus] Check for stream - audio: true video: true audioTracks: 1 videoTracks: 1
+mediasoup.ts:802 [MediaSoup] ✅ Consumer created: 57f14b5e-7224-4eaa-9069-a213f567f87e (video)
+mediasoup.ts:803 [MediaSoup] 📹 Track details - kind: video, readyState: live, enabled: true
+useAdvancedAudioProcessor.ts:229 [MediaStatus] Check for stream - audio: true video: true audioTracks: 1 videoTracks: 1
+mediasoup.ts:816 [MediaSoup] ✅ Consumer resumed: 57f14b5e-7224-4eaa-9069-a213f567f87e
+mediasoup.ts:898 [MediaSoup] 🔄 Replacing existing video track
+mediasoup.ts:907 [MediaSoup] 📥 Adding video track to stream for p7b6eE-YmNHiSIvmAAAL
+mediasoup.ts:908 [MediaSoup]    Track details: kind=video, id=57f14b5e-7224-4eaa-9069-a213f567f87e, readyState=live, enabled=true
+mediasoup.ts:912 [MediaSoup] ✅ Track added successfully
+mediasoup.ts:926 [MediaSoup] ✅ Successfully added video track to p7b6eE-YmNHiSIvmAAAL
+mediasoup.ts:927 [MediaSoup] 📊 Remote stream for p7b6eE-YmNHiSIvmAAAL: {audioEnabled: true, videoEnabled: true, trackCount: 2, tracks: Array(2)}audioEnabled: truetrackCount: 2tracks: Array(2)0: {kind: 'audio', id: '9bbdeb7d-6f5a-4c23-87e5-193b6d37b238', readyState: 'live', enabled: true}1: enabled: trueid: "57f14b5e-7224-4eaa-9069-a213f567f87e"kind: "video"readyState: "live"[[Prototype]]: Objectconstructor: ƒ Object()hasOwnProperty: ƒ hasOwnProperty()isPrototypeOf: ƒ isPrototypeOf()propertyIsEnumerable: ƒ propertyIsEnumerable()toLocaleString: ƒ toLocaleString()toString: ƒ toString()valueOf: ƒ valueOf()__defineGetter__: ƒ __defineGetter__()__defineSetter__: ƒ __defineSetter__()__lookupGetter__: ƒ __lookupGetter__()__lookupSetter__: ƒ __lookupSetter__()__proto__: (...)get __proto__: ƒ __proto__()set __proto__: ƒ __proto__()length: 2[[Prototype]]: Array(0)videoEnabled: true[[Prototype]]: Object
+mediasoup.ts:933 [MediaSoup] 📈 Total remote streams: 1
+useVideoCall.ts:115 [Hook] Remote streams updated: 1
+
+
+
+have bug in if i share screeen so share perfect and after stop to in my call perfect but partisipent remote stream nothinv video view perfect solve this only

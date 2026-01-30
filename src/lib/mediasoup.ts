@@ -668,6 +668,20 @@ export class MediaSoupClient {
     
     console.log('[MediaSoup] Screen share stopped');
     this.onScreenShareChange?.(false);
+
+    // After stopping screen share, ensure local video is resumed if it was enabled
+    if (this.localStream) {
+      const videoTrack = this.localStream.getVideoTracks()[0];
+      if (videoTrack && videoTrack.enabled) {
+        console.log('[MediaSoup] Resuming local video after screen share');
+        // If the producer was closed or needs update, we might need to handle it.
+        // But usually the video producer is still alive, just the UI might need a refresh
+        this.onLocalStream?.(this.localStream);
+      }
+    }
+    
+    // Force a UI refresh for remote streams to ensure they switch back from screen to video
+    this.onRemoteStream?.(new Map(this.remoteStreams));
   }
 
   isScreenSharing(): boolean {
